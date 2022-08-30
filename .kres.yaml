@@ -1,0 +1,3 @@
+---
+kind: golang.Generate
+spec: {}
