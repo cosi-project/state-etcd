@@ -2,19 +2,28 @@
 
 # THIS FILE WAS AUTOMATICALLY GENERATED, PLEASE DO NOT EDIT.
 #
-# Generated on 2022-08-26T17:09:03Z by kres latest.
+# Generated on 2022-09-14T10:28:03Z by kres 2e9342e.
 
 ARG TOOLCHAIN
 
 # cleaned up specs and compiled versions
 FROM scratch AS generate
 
+# runs markdownlint
+FROM docker.io/node:18.9.0-alpine3.16 AS lint-markdown
+WORKDIR /src
+RUN npm i -g markdownlint-cli@0.32.2
+RUN npm i sentences-per-line@0.2.1
+COPY .markdownlint.json .
+COPY ./README.md ./README.md
+RUN markdownlint --ignore "CHANGELOG.md" --ignore "**/node_modules/**" --ignore '**/hack/chglog/**' --rules node_modules/sentences-per-line/index.js .
+
 # base toolchain image
 FROM ${TOOLCHAIN} AS toolchain
 RUN apk --update --no-cache add bash curl build-base protoc protobuf-dev
 
 # build tools
-FROM toolchain AS tools
+FROM --platform=${BUILDPLATFORM} toolchain AS tools
 ENV GO111MODULE on
 ENV CGO_ENABLED 0
 ENV GOPATH /go

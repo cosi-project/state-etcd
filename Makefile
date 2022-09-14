@@ -1,6 +1,6 @@
 # THIS FILE WAS AUTOMATICALLY GENERATED, PLEASE DO NOT EDIT.
 #
-# Generated on 2022-08-26T17:09:03Z by kres latest.
+# Generated on 2022-09-14T10:28:03Z by kres 2e9342e.
 
 # common variables
 
@@ -17,7 +17,7 @@ GO_VERSION ?= 1.19
 GOIMPORTS_VERSION ?= v0.1.12
 PROTOBUF_GO_VERSION ?= 1.28.1
 GRPC_GO_VERSION ?= 1.2.0
-GRPC_GATEWAY_VERSION ?= 2.11.1
+GRPC_GATEWAY_VERSION ?= 2.11.3
 VTPROTOBUF_VERSION ?= 0.3.0
 DEEPCOPY_VERSION ?= v0.5.5
 TESTPKGS ?= ./...
@@ -39,6 +39,7 @@ COMMON_ARGS += --build-arg=ARTIFACTS=$(ARTIFACTS)
 COMMON_ARGS += --build-arg=SHA=$(SHA)
 COMMON_ARGS += --build-arg=TAG=$(TAG)
 COMMON_ARGS += --build-arg=USERNAME=$(USERNAME)
+COMMON_ARGS += --build-arg=REGISTRY=$(REGISTRY)
 COMMON_ARGS += --build-arg=TOOLCHAIN=$(TOOLCHAIN)
 COMMON_ARGS += --build-arg=GOLANGCILINT_VERSION=$(GOLANGCILINT_VERSION)
 COMMON_ARGS += --build-arg=GOFUMPT_VERSION=$(GOFUMPT_VERSION)
@@ -128,8 +129,12 @@ unit-tests-race:  ## Performs unit tests with race detection enabled.
 coverage:  ## Upload coverage data to codecov.io.
 	bash -c "bash <(curl -s https://codecov.io/bash) -f $(ARTIFACTS)/coverage.txt -X fix"
 
+.PHONY: lint-markdown
+lint-markdown:  ## Runs markdownlint.
+	@$(MAKE) target-$@
+
 .PHONY: lint
-lint: lint-golangci-lint lint-gofumpt lint-goimports  ## Run all linters for the project.
+lint: lint-golangci-lint lint-gofumpt lint-goimports lint-markdown  ## Run all linters for the project.
 
 .PHONY: rekres
 rekres:

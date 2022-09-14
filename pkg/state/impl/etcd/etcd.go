@@ -34,8 +34,11 @@ type State struct {
 	salt      []byte
 }
 
+// Check interface implementation.
+var _ state.CoreState = &State{}
+
 // NewState creates new State with default options.
-func NewState(cli Client, opts ...StateOption) *State {
+func NewState(cli Client, marshaler store.Marshaler, opts ...StateOption) *State {
 	options := DefaultStateOptions()
 
 	for _, opt := range opts {
@@ -44,7 +47,7 @@ func NewState(cli Client, opts ...StateOption) *State {
 
 	return &State{
 		cli:       cli,
-		marshaler: store.ProtobufMarshaler{},
+		marshaler: marshaler,
 		keyPrefix: options.keyPrefix,
 		salt:      options.salt,
 	}

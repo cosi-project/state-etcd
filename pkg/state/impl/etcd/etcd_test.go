@@ -14,19 +14,13 @@ import (
 	"github.com/cosi-project/runtime/pkg/resource/protobuf"
 	"github.com/cosi-project/runtime/pkg/state"
 	"github.com/cosi-project/runtime/pkg/state/conformance"
-	"github.com/stretchr/testify/assert"
+	"github.com/cosi-project/runtime/pkg/state/impl/store"
 	"github.com/stretchr/testify/suite"
 	"go.etcd.io/etcd/server/v3/embed"
 	"go.etcd.io/etcd/server/v3/etcdserver/api/v3client"
 
 	"github.com/cosi-project/state-etcd/pkg/state/impl/etcd"
 )
-
-func TestInterfaces(t *testing.T) {
-	t.Parallel()
-
-	assert.Implements(t, (*state.CoreState)(nil), new(etcd.State))
-}
 
 func TestEtcdConformance(t *testing.T) {
 	t.Parallel()
@@ -91,7 +85,7 @@ func withEtcd(t *testing.T, f func(state.State)) {
 
 	defer cli.Close() //nolint:errcheck
 
-	etcdState := etcd.NewState(cli, etcd.WithSalt([]byte("test123")))
+	etcdState := etcd.NewState(cli, store.ProtobufMarshaler{}, etcd.WithSalt([]byte("test123")))
 	st := state.WrapCore(etcdState)
 
 	f(st)
