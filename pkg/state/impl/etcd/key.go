@@ -23,8 +23,8 @@ func (st *State) etcdKeyFromPointer(pointer resource.Pointer) string {
 
 // etcdKeyPrefixFromKind returns a key prefix for the given resource kind.
 func (st *State) etcdKeyPrefixFromKind(kind resource.Kind) string {
-	nsEscaped := url.QueryEscape(kind.Namespace())
-	typeEscaped := url.QueryEscape(kind.Type())
+	nsEscaped := url.PathEscape(kind.Namespace())
+	typeEscaped := url.PathEscape(kind.Type())
 
 	return st.keyPrefix + "/" + nsEscaped + "/" + typeEscaped + "/"
 }
