@@ -5,7 +5,7 @@ go 1.19
 require (
 	github.com/cosi-project/runtime v0.2.0-alpha.0
 	github.com/stretchr/testify v1.8.0
-	go.etcd.io/etcd/api/v3 v3.5.4
+	go.etcd.io/etcd/api/v3 v3.5.5
 	go.etcd.io/etcd/client/v3 v3.5.4
 	go.etcd.io/etcd/server/v3 v3.5.4
 )
