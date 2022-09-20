@@ -6,6 +6,7 @@ package etcd_test
 
 import (
 	"context"
+	"log"
 	"net/url"
 	"testing"
 	"time"
@@ -15,26 +16,68 @@ import (
 	"github.com/cosi-project/runtime/pkg/state"
 	"github.com/cosi-project/runtime/pkg/state/conformance"
 	"github.com/cosi-project/runtime/pkg/state/impl/store"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 	"go.etcd.io/etcd/server/v3/embed"
 	"go.etcd.io/etcd/server/v3/etcdserver/api/v3client"
+	"google.golang.org/grpc/metadata"
 
 	"github.com/cosi-project/state-etcd/pkg/state/impl/etcd"
 )
 
-func TestEtcdConformance(t *testing.T) {
-	t.Parallel()
-
+func init() {
 	err := protobuf.RegisterResource(conformance.PathResourceType, &conformance.PathResource{})
 	if err != nil {
-		t.Fatalf("failed to register resource: %v", err)
+		log.Fatalf("failed to register resource: %v", err)
 	}
+}
+
+func TestEtcdConformance(t *testing.T) {
+	t.Parallel()
 
 	withEtcd(t, func(s state.State) {
 		suite.Run(t, &conformance.StateSuite{
 			State:      s,
 			Namespaces: []resource.Namespace{"default", "controller", "system", "runtime"},
 		})
+	})
+}
+
+func TestClearGRPCMetadata(t *testing.T) {
+	t.Parallel()
+
+	res := conformance.NewPathResource("default", "/")
+
+	withEtcd(t, func(s state.State) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		// the authorization header causes embedded etcd to return an error if it is passed through
+		ctx = metadata.NewIncomingContext(
+			ctx,
+			metadata.Pairs("authorization", "bearer something"),
+		)
+
+		err := s.Create(ctx, res)
+		assert.NoError(t, err)
+
+		_, err = s.Get(ctx, res.Metadata())
+		assert.NoError(t, err)
+
+		_, err = s.List(ctx, res.Metadata())
+		assert.NoError(t, err)
+
+		err = s.Update(ctx, res)
+		assert.NoError(t, err)
+
+		err = s.Watch(ctx, res.Metadata(), nil)
+		assert.NoError(t, err)
+
+		err = s.WatchKind(ctx, res.Metadata(), nil)
+		assert.NoError(t, err)
+
+		err = s.Destroy(ctx, res.Metadata())
+		assert.NoError(t, err)
 	})
 }
 

@@ -18,6 +18,7 @@ import (
 	"github.com/cosi-project/runtime/pkg/state/impl/store"
 	"go.etcd.io/etcd/api/v3/mvccpb"
 	clientv3 "go.etcd.io/etcd/client/v3"
+	"google.golang.org/grpc/metadata"
 )
 
 // Client is the etcd client interface required by this state implementation.
@@ -55,6 +56,8 @@ func NewState(cli Client, marshaler store.Marshaler, opts ...StateOption) *State
 
 // Get a resource.
 func (st *State) Get(ctx context.Context, resourcePointer resource.Pointer, opts ...state.GetOption) (resource.Resource, error) { //nolint:ireturn
+	ctx = st.clearIncomingContext(ctx)
+
 	var options state.GetOptions
 
 	for _, opt := range opts {
@@ -77,6 +80,8 @@ func (st *State) Get(ctx context.Context, resourcePointer resource.Pointer, opts
 
 // List resources.
 func (st *State) List(ctx context.Context, resourceKind resource.Kind, opts ...state.ListOption) (resource.List, error) {
+	ctx = st.clearIncomingContext(ctx)
+
 	var options state.ListOptions
 
 	for _, opt := range opts {
@@ -116,6 +121,8 @@ func (st *State) List(ctx context.Context, resourceKind resource.Kind, opts ...s
 
 // Create a resource.
 func (st *State) Create(ctx context.Context, res resource.Resource, opts ...state.CreateOption) error {
+	ctx = st.clearIncomingContext(ctx)
+
 	resCopy := res.DeepCopy()
 
 	var options state.CreateOptions
@@ -163,6 +170,8 @@ func (st *State) Create(ctx context.Context, res resource.Resource, opts ...stat
 
 // Update a resource.
 func (st *State) Update(ctx context.Context, res resource.Resource, opts ...state.UpdateOption) error {
+	ctx = st.clearIncomingContext(ctx)
+
 	resCopy := res.DeepCopy()
 
 	options := state.DefaultUpdateOptions()
@@ -251,6 +260,8 @@ func (st *State) Update(ctx context.Context, res resource.Resource, opts ...stat
 
 // Destroy a resource.
 func (st *State) Destroy(ctx context.Context, resourcePointer resource.Pointer, opts ...state.DestroyOption) error {
+	ctx = st.clearIncomingContext(ctx)
+
 	var options state.DestroyOptions
 
 	for _, opt := range opts {
@@ -310,6 +321,8 @@ func (st *State) Destroy(ctx context.Context, resourcePointer resource.Pointer, 
 
 // Watch a resource.
 func (st *State) Watch(ctx context.Context, resourcePointer resource.Pointer, ch chan<- state.Event, opts ...state.WatchOption) error {
+	ctx = st.clearIncomingContext(ctx)
+
 	var options state.WatchOptions
 
 	for _, opt := range opts {
@@ -400,6 +413,8 @@ func (st *State) Watch(ctx context.Context, resourcePointer resource.Pointer, ch
 //
 //nolint:gocyclo,cyclop,gocognit
 func (st *State) WatchKind(ctx context.Context, resourceKind resource.Kind, ch chan<- state.Event, opts ...state.WatchKindOption) error {
+	ctx = st.clearIncomingContext(ctx)
+
 	var options state.WatchKindOptions
 
 	for _, opt := range opts {
@@ -587,4 +602,11 @@ func (st *State) convertEvent(etcdEvent *clientv3.Event) (*state.Event, error) {
 		Old:      previous,
 		Type:     eventType,
 	}, nil
+}
+
+// clearIncomingContext returns a new context with the given parent context but with all incoming GRPC metadata removed.
+//
+// This is useful for preventing the GRPC metadata from being forwarded to etcd, e.g. in cases where an embedded etcd is used.
+func (st *State) clearIncomingContext(ctx context.Context) context.Context {
+	return metadata.NewIncomingContext(ctx, metadata.MD{})
 }
