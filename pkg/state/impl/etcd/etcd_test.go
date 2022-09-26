@@ -7,9 +7,7 @@ package etcd_test
 import (
 	"context"
 	"log"
-	"net/url"
 	"testing"
-	"time"
 
 	"github.com/cosi-project/runtime/pkg/resource"
 	"github.com/cosi-project/runtime/pkg/resource/protobuf"
@@ -18,11 +16,11 @@ import (
 	"github.com/cosi-project/runtime/pkg/state/impl/store"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
-	"go.etcd.io/etcd/server/v3/embed"
-	"go.etcd.io/etcd/server/v3/etcdserver/api/v3client"
+	clientv3 "go.etcd.io/etcd/client/v3"
 	"google.golang.org/grpc/metadata"
 
 	"github.com/cosi-project/state-etcd/pkg/state/impl/etcd"
+	"github.com/cosi-project/state-etcd/pkg/util/testhelpers"
 )
 
 func init() {
@@ -82,54 +80,10 @@ func TestClearGRPCMetadata(t *testing.T) {
 }
 
 func withEtcd(t *testing.T, f func(state.State)) {
-	tempDir := t.TempDir()
+	testhelpers.WithEtcd(t, func(cli *clientv3.Client) {
+		etcdState := etcd.NewState(cli, store.ProtobufMarshaler{}, etcd.WithSalt([]byte("test123")))
+		st := state.WrapCore(etcdState)
 
-	cfg := embed.NewConfig()
-	cfg.Dir = tempDir
-
-	peerURL, err := url.Parse("http://localhost:0")
-	if err != nil {
-		t.Fatalf("failed to parse URL: %v", err)
-	}
-
-	clientURL, err := url.Parse("http://localhost:0")
-	if err != nil {
-		t.Fatalf("failed to parse URL: %v", err)
-	}
-
-	cfg.LPUrls = []url.URL{*peerURL}
-	cfg.LCUrls = []url.URL{*clientURL}
-
-	e, err := embed.StartEtcd(cfg)
-	if err != nil {
-		t.Fatalf("failed to start etcd: %v", err)
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-
-	select {
-	case <-e.Server.ReadyNotify():
-	case <-ctx.Done():
-		t.Fatalf("etcd failed to start")
-	}
-
-	defer func() {
-		e.Close()
-
-		select {
-		case <-e.Server.StopNotify():
-		case <-ctx.Done():
-			t.Fatalf("etcd failed to stop")
-		}
-	}()
-
-	cli := v3client.New(e.Server)
-
-	defer cli.Close() //nolint:errcheck
-
-	etcdState := etcd.NewState(cli, store.ProtobufMarshaler{}, etcd.WithSalt([]byte("test123")))
-	st := state.WrapCore(etcdState)
-
-	f(st)
+		f(st)
+	})
 }

@@ -18,7 +18,8 @@ import (
 	"github.com/cosi-project/runtime/pkg/state/impl/store"
 	"go.etcd.io/etcd/api/v3/mvccpb"
 	clientv3 "go.etcd.io/etcd/client/v3"
-	"google.golang.org/grpc/metadata"
+
+	"github.com/cosi-project/state-etcd/pkg/util"
 )
 
 // Client is the etcd client interface required by this state implementation.
@@ -608,5 +609,5 @@ func (st *State) convertEvent(etcdEvent *clientv3.Event) (*state.Event, error) {
 //
 // This is useful for preventing the GRPC metadata from being forwarded to etcd, e.g. in cases where an embedded etcd is used.
 func (st *State) clearIncomingContext(ctx context.Context) context.Context {
-	return metadata.NewIncomingContext(ctx, metadata.MD{})
+	return util.ClearContextMeta(ctx)
 }
