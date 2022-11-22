@@ -138,6 +138,8 @@ func (st *State) Create(ctx context.Context, res resource.Resource, opts ...stat
 		return err
 	}
 
+	resCopy.Metadata().SetCreated(time.Now())
+
 	data, err := st.marshaler.MarshalResource(resCopy)
 	if err != nil {
 		return err
@@ -164,9 +166,12 @@ func (st *State) Create(ctx context.Context, res resource.Resource, opts ...stat
 		return err
 	}
 
-	res.Metadata().SetVersion(version)
+	resCopy.Metadata().SetVersion(version)
+	// This should be safe, because we don't allow to share metadata between goroutines even for read-only
+	// purposes.
+	*res.Metadata() = *resCopy.Metadata()
 
-	return res.Metadata().SetOwner(options.Owner)
+	return nil
 }
 
 // Update a resource.
@@ -183,15 +188,6 @@ func (st *State) Update(ctx context.Context, res resource.Resource, opts ...stat
 
 	etcdKey := st.etcdKeyFromPointer(resCopy.Metadata())
 
-	updated := time.Now()
-
-	resCopy.Metadata().SetUpdated(updated)
-
-	data, err := st.marshaler.MarshalResource(resCopy)
-	if err != nil {
-		return err
-	}
-
 	getResp, err := st.cli.Get(ctx, etcdKey)
 	if err != nil {
 		return err
@@ -202,6 +198,16 @@ func (st *State) Update(ctx context.Context, res resource.Resource, opts ...stat
 	}
 
 	curResource, err := st.unmarshalResource(getResp.Kvs[0])
+	if err != nil {
+		return err
+	}
+
+	updated := time.Now()
+
+	resCopy.Metadata().SetUpdated(updated)
+	resCopy.Metadata().SetCreated(curResource.Metadata().Created())
+
+	data, err := st.marshaler.MarshalResource(resCopy)
 	if err != nil {
 		return err
 	}
@@ -245,8 +251,6 @@ func (st *State) Update(ctx context.Context, res resource.Resource, opts ...stat
 		return ErrVersionConflict(resCopy.Metadata(), expectedVersion, foundVersion)
 	}
 
-	res.Metadata().SetUpdated(updated)
-
 	versionStr := strconv.FormatInt(txnResp.Responses[1].GetResponseRange().Kvs[0].Version, 10)
 
 	version, err := resource.ParseVersion(versionStr)
@@ -254,7 +258,10 @@ func (st *State) Update(ctx context.Context, res resource.Resource, opts ...stat
 		return err
 	}
 
-	res.Metadata().SetVersion(version)
+	resCopy.Metadata().SetVersion(version)
+	// This should be safe, because we don't allow to share metadata between goroutines even for read-only
+	// purposes.
+	*res.Metadata() = *resCopy.Metadata()
 
 	return nil
 }

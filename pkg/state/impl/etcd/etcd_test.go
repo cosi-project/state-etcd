@@ -8,6 +8,7 @@ import (
 	"context"
 	"log"
 	"testing"
+	"time"
 
 	"github.com/cosi-project/runtime/pkg/resource"
 	"github.com/cosi-project/runtime/pkg/resource/protobuf"
@@ -38,6 +39,38 @@ func TestEtcdConformance(t *testing.T) {
 			State:      s,
 			Namespaces: []resource.Namespace{"default", "controller", "system", "runtime"},
 		})
+	})
+}
+
+func TestPreserveCreated(t *testing.T) {
+	res := conformance.NewPathResource("default", "/another-path")
+
+	withEtcd(t, func(s state.State) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		ctx = metadata.NewIncomingContext(
+			ctx,
+			metadata.Pairs("authorization", "bearer something"),
+		)
+
+		err := s.Create(ctx, res)
+		assert.NoError(t, err)
+
+		got, err := s.Get(ctx, res.Metadata())
+		assert.NoError(t, err)
+		assert.NotZero(t, got.Metadata().Created())
+
+		cpy := got.DeepCopy()
+		cpy.Metadata().SetCreated(time.Time{})
+
+		err = s.Update(ctx, cpy)
+		assert.NoError(t, err)
+
+		result, err := s.Get(ctx, cpy.Metadata())
+		assert.NoError(t, err)
+
+		assert.Equal(t, got.Metadata().Created(), result.Metadata().Created())
 	})
 }
 
