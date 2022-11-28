@@ -16,6 +16,7 @@ import (
 	"github.com/cosi-project/runtime/pkg/resource"
 	"github.com/cosi-project/runtime/pkg/state"
 	"github.com/cosi-project/runtime/pkg/state/impl/store"
+	"github.com/siderolabs/gen/channel"
 	"go.etcd.io/etcd/api/v3/mvccpb"
 	clientv3 "go.etcd.io/etcd/client/v3"
 
@@ -328,6 +329,8 @@ func (st *State) Destroy(ctx context.Context, resourcePointer resource.Pointer, 
 }
 
 // Watch a resource.
+//
+//nolint:gocognit
 func (st *State) Watch(ctx context.Context, resourcePointer resource.Pointer, ch chan<- state.Event, opts ...state.WatchOption) error {
 	ctx = st.clearIncomingContext(ctx)
 
@@ -376,22 +379,44 @@ func (st *State) Watch(ctx context.Context, resourcePointer resource.Pointer, ch
 
 	revision := getResp.Header.Revision
 
+	// wrap the context to make sure Watch is aborted if the loop terminates
+	ctx, cancel := context.WithCancel(ctx)
+	ctx = clientv3.WithRequireLeader(ctx)
+
 	watchCh := st.cli.Watch(ctx, etcdKey, clientv3.WithPrevKV(), clientv3.WithRev(revision))
 
 	go func() {
-		select {
-		case <-ctx.Done():
+		defer cancel()
+
+		if !channel.SendWithContext(ctx, ch, initialEvent) {
 			return
-		case ch <- initialEvent:
 		}
 
 		for {
-			var watchResponse clientv3.WatchResponse
+			var (
+				watchResponse clientv3.WatchResponse
+				ok            bool
+			)
 
 			select {
 			case <-ctx.Done():
 				return
-			case watchResponse = <-watchCh:
+			case watchResponse, ok = <-watchCh:
+				if !ok {
+					// channel closed, quit
+					return
+				}
+			}
+
+			if watchResponse.Err() != nil {
+				channel.SendWithContext(ctx, ch,
+					state.Event{
+						Type:  state.Errored,
+						Error: watchResponse.Err(),
+					},
+				)
+
+				return
 			}
 
 			if watchResponse.Canceled {
@@ -401,14 +426,18 @@ func (st *State) Watch(ctx context.Context, resourcePointer resource.Pointer, ch
 			for _, etcdEvent := range watchResponse.Events {
 				event, err := st.convertEvent(etcdEvent)
 				if err != nil {
-					// skip the event
-					continue
+					channel.SendWithContext(ctx, ch,
+						state.Event{
+							Type:  state.Errored,
+							Error: err,
+						},
+					)
+
+					return
 				}
 
-				select {
-				case <-ctx.Done():
+				if !channel.SendWithContext(ctx, ch, event) {
 					return
-				case ch <- *event:
 				}
 			}
 		}
@@ -469,19 +498,25 @@ func (st *State) WatchKind(ctx context.Context, resourceKind resource.Kind, ch c
 		})
 	}
 
+	// wrap the context to make sure Watch is aborted if the loop terminates
+	ctx, cancel := context.WithCancel(ctx)
+	ctx = clientv3.WithRequireLeader(ctx)
+
 	watchCh := st.cli.Watch(ctx, etcdKey, clientv3.WithPrefix(), clientv3.WithPrevKV(), clientv3.WithRev(revision))
 
 	go func() {
+		defer cancel()
+
 		sentBootstrapEventSet := make(map[string]struct{}, len(bootstrapList))
 
 		// send initial contents if they were captured
 		for _, res := range bootstrapList {
-			select {
-			case ch <- state.Event{
-				Type:     state.Created,
-				Resource: res,
-			}:
-			case <-ctx.Done():
+			if !channel.SendWithContext(ctx, ch,
+				state.Event{
+					Type:     state.Created,
+					Resource: res,
+				},
+			) {
 				return
 			}
 
@@ -490,13 +525,41 @@ func (st *State) WatchKind(ctx context.Context, resourceKind resource.Kind, ch c
 
 		bootstrapList = nil
 
+		if options.BootstrapContents {
+			if !channel.SendWithContext(ctx, ch,
+				state.Event{
+					Type: state.Bootstrapped,
+				},
+			) {
+				return
+			}
+		}
+
 		for {
-			var watchResponse clientv3.WatchResponse
+			var (
+				watchResponse clientv3.WatchResponse
+				ok            bool
+			)
 
 			select {
 			case <-ctx.Done():
 				return
-			case watchResponse = <-watchCh:
+			case watchResponse, ok = <-watchCh:
+				if !ok {
+					// channel closed, quit
+					return
+				}
+			}
+
+			if watchResponse.Err() != nil {
+				channel.SendWithContext(ctx, ch,
+					state.Event{
+						Type:  state.Errored,
+						Error: watchResponse.Err(),
+					},
+				)
+
+				return
 			}
 
 			if watchResponse.Canceled {
@@ -506,8 +569,14 @@ func (st *State) WatchKind(ctx context.Context, resourceKind resource.Kind, ch c
 			for _, etcdEvent := range watchResponse.Events {
 				event, err := st.convertEvent(etcdEvent)
 				if err != nil {
-					// skip the event
-					continue
+					channel.SendWithContext(ctx, ch,
+						state.Event{
+							Type:  state.Errored,
+							Error: err,
+						},
+					)
+
+					return
 				}
 
 				switch event.Type {
@@ -534,6 +603,8 @@ func (st *State) WatchKind(ctx context.Context, resourceKind resource.Kind, ch c
 						// skip the event
 						continue
 					}
+				case state.Errored, state.Bootstrapped:
+					panic("should never be reached")
 				}
 
 				if !(event.Type == state.Destroyed) {
@@ -543,10 +614,8 @@ func (st *State) WatchKind(ctx context.Context, resourceKind resource.Kind, ch c
 					}
 				}
 
-				select {
-				case <-ctx.Done():
+				if !channel.SendWithContext(ctx, ch, event) {
 					return
-				case ch <- *event:
 				}
 			}
 		}
@@ -568,9 +637,9 @@ func (st *State) unmarshalResource(kv *mvccpb.KeyValue) (resource.Resource, erro
 	return res, err
 }
 
-func (st *State) convertEvent(etcdEvent *clientv3.Event) (*state.Event, error) {
+func (st *State) convertEvent(etcdEvent *clientv3.Event) (state.Event, error) {
 	if etcdEvent == nil {
-		return nil, fmt.Errorf("etcd event is nil")
+		return state.Event{}, fmt.Errorf("etcd event is nil")
 	}
 
 	var (
@@ -582,19 +651,19 @@ func (st *State) convertEvent(etcdEvent *clientv3.Event) (*state.Event, error) {
 	if etcdEvent.Kv != nil && etcdEvent.Type != clientv3.EventTypeDelete {
 		current, err = st.unmarshalResource(etcdEvent.Kv)
 		if err != nil {
-			return nil, err
+			return state.Event{}, err
 		}
 	}
 
 	if etcdEvent.PrevKv != nil {
 		previous, err = st.unmarshalResource(etcdEvent.PrevKv)
 		if err != nil {
-			return nil, err
+			return state.Event{}, err
 		}
 	}
 
 	if etcdEvent.Type == clientv3.EventTypeDelete {
-		return &state.Event{
+		return state.Event{
 			Resource: previous,
 			Type:     state.Destroyed,
 		}, nil
@@ -605,7 +674,7 @@ func (st *State) convertEvent(etcdEvent *clientv3.Event) (*state.Event, error) {
 		eventType = state.Created
 	}
 
-	return &state.Event{
+	return state.Event{
 		Resource: current,
 		Old:      previous,
 		Type:     eventType,

@@ -10,13 +10,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cosi-project/runtime/pkg/resource"
 	"github.com/cosi-project/runtime/pkg/resource/protobuf"
 	"github.com/cosi-project/runtime/pkg/state"
 	"github.com/cosi-project/runtime/pkg/state/conformance"
 	"github.com/cosi-project/runtime/pkg/state/impl/store"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/suite"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"google.golang.org/grpc/metadata"
 
@@ -29,17 +27,6 @@ func init() {
 	if err != nil {
 		log.Fatalf("failed to register resource: %v", err)
 	}
-}
-
-func TestEtcdConformance(t *testing.T) {
-	t.Parallel()
-
-	withEtcd(t, func(s state.State) {
-		suite.Run(t, &conformance.StateSuite{
-			State:      s,
-			Namespaces: []resource.Namespace{"default", "controller", "system", "runtime"},
-		})
-	})
 }
 
 func TestPreserveCreated(t *testing.T) {
