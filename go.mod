@@ -6,9 +6,9 @@ require (
 	github.com/cosi-project/runtime v0.2.0-alpha.3.0.20221122092349-0aec1ea959f6
 	github.com/siderolabs/gen v0.4.0
 	github.com/stretchr/testify v1.8.1
-	go.etcd.io/etcd/api/v3 v3.5.5
-	go.etcd.io/etcd/client/v3 v3.5.5
-	go.etcd.io/etcd/server/v3 v3.5.5
+	go.etcd.io/etcd/api/v3 v3.5.6
+	go.etcd.io/etcd/client/v3 v3.5.6
+	go.etcd.io/etcd/server/v3 v3.5.6
 	google.golang.org/grpc v1.51.0
 )
 
@@ -21,8 +21,8 @@ require (
 	github.com/coreos/go-systemd/v22 v22.3.2 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dustin/go-humanize v1.0.0 // indirect
-	github.com/form3tech-oss/jwt-go v3.2.3+incompatible // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
+	github.com/golang-jwt/jwt/v4 v4.4.2 // indirect
 	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/google/btree v1.0.1 // indirect
 	github.com/gorilla/websocket v1.4.2 // indirect
@@ -48,10 +48,10 @@ require (
 	github.com/tmc/grpc-websocket-proxy v0.0.0-20201229170055-e5319fda7802 // indirect
 	github.com/xiang90/probing v0.0.0-20190116061207-43a291ad63a2 // indirect
 	go.etcd.io/bbolt v1.3.6 // indirect
-	go.etcd.io/etcd/client/pkg/v3 v3.5.5 // indirect
-	go.etcd.io/etcd/client/v2 v2.305.5 // indirect
-	go.etcd.io/etcd/pkg/v3 v3.5.5 // indirect
-	go.etcd.io/etcd/raft/v3 v3.5.5 // indirect
+	go.etcd.io/etcd/client/pkg/v3 v3.5.6 // indirect
+	go.etcd.io/etcd/client/v2 v2.305.6 // indirect
+	go.etcd.io/etcd/pkg/v3 v3.5.6 // indirect
+	go.etcd.io/etcd/raft/v3 v3.5.6 // indirect
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.25.0 // indirect
 	go.opentelemetry.io/otel v1.0.1 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.0.1 // indirect
