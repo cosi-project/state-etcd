@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/cosi-project/runtime/pkg/resource"
@@ -113,7 +112,7 @@ func (st *State) List(ctx context.Context, resourceKind resource.Kind, opts ...s
 	}
 
 	sort.Slice(resources, func(i, j int) bool {
-		return strings.Compare(resources[i].Metadata().String(), resources[j].Metadata().String()) < 0
+		return resources[i].Metadata().ID() < resources[j].Metadata().ID()
 	})
 
 	return resource.List{
@@ -507,8 +506,6 @@ func (st *State) WatchKind(ctx context.Context, resourceKind resource.Kind, ch c
 	go func() {
 		defer cancel()
 
-		sentBootstrapEventSet := make(map[string]struct{}, len(bootstrapList))
-
 		// send initial contents if they were captured
 		for _, res := range bootstrapList {
 			if !channel.SendWithContext(ctx, ch,
@@ -519,8 +516,6 @@ func (st *State) WatchKind(ctx context.Context, resourceKind resource.Kind, ch c
 			) {
 				return
 			}
-
-			sentBootstrapEventSet[res.Metadata().String()] = struct{}{}
 		}
 
 		bootstrapList = nil
@@ -567,6 +562,11 @@ func (st *State) WatchKind(ctx context.Context, resourceKind resource.Kind, ch c
 			}
 
 			for _, etcdEvent := range watchResponse.Events {
+				// watch event might come for a revision which was already sent in the bootstrapped set, ignore it
+				if etcdEvent.Kv != nil && etcdEvent.Kv.ModRevision <= revision {
+					continue
+				}
+
 				event, err := st.convertEvent(etcdEvent)
 				if err != nil {
 					channel.SendWithContext(ctx, ch,
@@ -605,13 +605,6 @@ func (st *State) WatchKind(ctx context.Context, resourceKind resource.Kind, ch c
 					}
 				case state.Errored, state.Bootstrapped:
 					panic("should never be reached")
-				}
-
-				if !(event.Type == state.Destroyed) {
-					_, alreadySent := sentBootstrapEventSet[event.Resource.Metadata().String()]
-					if alreadySent {
-						continue
-					}
 				}
 
 				if !channel.SendWithContext(ctx, ch, event) {

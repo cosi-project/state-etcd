@@ -6,7 +6,6 @@ package etcd_test
 
 import (
 	"context"
-	"log"
 	"testing"
 	"time"
 
@@ -23,10 +22,7 @@ import (
 )
 
 func init() {
-	err := protobuf.RegisterResource(conformance.PathResourceType, &conformance.PathResource{})
-	if err != nil {
-		log.Fatalf("failed to register resource: %v", err)
-	}
+	must(protobuf.RegisterResource(conformance.PathResourceType, &conformance.PathResource{}))
 }
 
 func TestPreserveCreated(t *testing.T) {

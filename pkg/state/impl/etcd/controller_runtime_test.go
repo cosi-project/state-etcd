@@ -13,7 +13,6 @@ import (
 	"github.com/cosi-project/runtime/pkg/resource/protobuf"
 	"github.com/cosi-project/runtime/pkg/state"
 	"github.com/cosi-project/runtime/pkg/state/impl/store"
-	"github.com/stretchr/testify/require"
 	suiterunner "github.com/stretchr/testify/suite"
 	clientv3 "go.etcd.io/etcd/client/v3"
 
@@ -21,12 +20,20 @@ import (
 	"github.com/cosi-project/state-etcd/pkg/util/testhelpers"
 )
 
+func must(err error) {
+	if err != nil {
+		panic(err)
+	}
+}
+
+func init() {
+	must(protobuf.RegisterResource(conformance.IntResourceType, &conformance.IntResource{}))
+	must(protobuf.RegisterResource(conformance.StrResourceType, &conformance.StrResource{}))
+	must(protobuf.RegisterResource(conformance.SentenceResourceType, &conformance.SentenceResource{}))
+}
+
 func TestRuntimeConformance(t *testing.T) {
 	t.Parallel()
-
-	require.NoError(t, protobuf.RegisterResource(conformance.IntResourceType, &conformance.IntResource{}))
-	require.NoError(t, protobuf.RegisterResource(conformance.StrResourceType, &conformance.StrResource{}))
-	require.NoError(t, protobuf.RegisterResource(conformance.SentenceResourceType, &conformance.SentenceResource{}))
 
 	testhelpers.WithEtcd(t, func(cli *clientv3.Client) {
 		suite := &conformance.RuntimeSuite{}
