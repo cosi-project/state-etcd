@@ -108,6 +108,10 @@ func (st *State) List(ctx context.Context, resourceKind resource.Kind, opts ...s
 			continue
 		}
 
+		if !options.IDQuery.Matches(*res.Metadata()) {
+			continue
+		}
+
 		resources = append(resources, res)
 	}
 
@@ -458,7 +462,7 @@ func (st *State) WatchKind(ctx context.Context, resourceKind resource.Kind, ch c
 	}
 
 	matches := func(res resource.Resource) bool {
-		return options.LabelQuery.Matches(*res.Metadata().Labels())
+		return options.LabelQuery.Matches(*res.Metadata().Labels()) && options.IDQuery.Matches(*res.Metadata())
 	}
 
 	if options.TailEvents > 0 {

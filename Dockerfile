@@ -2,7 +2,7 @@
 
 # THIS FILE WAS AUTOMATICALLY GENERATED, PLEASE DO NOT EDIT.
 #
-# Generated on 2023-01-16T15:36:22Z by kres latest.
+# Generated on 2023-02-07T18:52:17Z by kres latest.
 
 ARG TOOLCHAIN
 
@@ -10,7 +10,7 @@ ARG TOOLCHAIN
 FROM scratch AS generate
 
 # runs markdownlint
-FROM docker.io/node:19.4.0-alpine3.16 AS lint-markdown
+FROM docker.io/node:19.6.0-alpine3.16 AS lint-markdown
 WORKDIR /src
 RUN npm i -g markdownlint-cli@0.33.0
 RUN npm i sentences-per-line@0.2.1
@@ -29,18 +29,18 @@ ARG CGO_ENABLED
 ENV CGO_ENABLED ${CGO_ENABLED}
 ENV GOPATH /go
 ARG GOLANGCILINT_VERSION
-RUN go install github.com/golangci/golangci-lint/cmd/golangci-lint@${GOLANGCILINT_VERSION} \
+RUN --mount=type=cache,target=/root/.cache/go-build --mount=type=cache,target=/go/pkg go install github.com/golangci/golangci-lint/cmd/golangci-lint@${GOLANGCILINT_VERSION} \
 	&& mv /go/bin/golangci-lint /bin/golangci-lint
 ARG GOFUMPT_VERSION
 RUN go install mvdan.cc/gofumpt@${GOFUMPT_VERSION} \
 	&& mv /go/bin/gofumpt /bin/gofumpt
-RUN go install golang.org/x/vuln/cmd/govulncheck@latest \
+RUN --mount=type=cache,target=/root/.cache/go-build --mount=type=cache,target=/go/pkg go install golang.org/x/vuln/cmd/govulncheck@latest \
 	&& mv /go/bin/govulncheck /bin/govulncheck
 ARG GOIMPORTS_VERSION
-RUN go install golang.org/x/tools/cmd/goimports@${GOIMPORTS_VERSION} \
+RUN --mount=type=cache,target=/root/.cache/go-build --mount=type=cache,target=/go/pkg go install golang.org/x/tools/cmd/goimports@${GOIMPORTS_VERSION} \
 	&& mv /go/bin/goimports /bin/goimports
 ARG DEEPCOPY_VERSION
-RUN go install github.com/siderolabs/deep-copy@${DEEPCOPY_VERSION} \
+RUN --mount=type=cache,target=/root/.cache/go-build --mount=type=cache,target=/go/pkg go install github.com/siderolabs/deep-copy@${DEEPCOPY_VERSION} \
 	&& mv /go/bin/deep-copy /bin/deep-copy
 
 # tools and sources
