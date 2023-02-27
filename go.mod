@@ -5,7 +5,7 @@ go 1.20
 require (
 	github.com/cosi-project/runtime v0.3.0-alpha.4.0.20230206134251-7bcfd6964cfd
 	github.com/siderolabs/gen v0.4.3
-	github.com/stretchr/testify v1.8.1
+	github.com/stretchr/testify v1.8.2
 	go.etcd.io/etcd/api/v3 v3.5.7
 	go.etcd.io/etcd/client/v3 v3.5.7
 	go.etcd.io/etcd/server/v3 v3.5.7
