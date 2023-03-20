@@ -16,6 +16,7 @@ import (
 	"github.com/cosi-project/runtime/pkg/state"
 	"github.com/cosi-project/runtime/pkg/state/impl/store"
 	"github.com/siderolabs/gen/channel"
+	"github.com/siderolabs/gen/slices"
 	"go.etcd.io/etcd/api/v3/mvccpb"
 	clientv3 "go.etcd.io/etcd/client/v3"
 
@@ -450,9 +451,17 @@ func (st *State) Watch(ctx context.Context, resourcePointer resource.Pointer, ch
 }
 
 // WatchKind all resources by type.
-//
-//nolint:gocyclo,cyclop,gocognit
 func (st *State) WatchKind(ctx context.Context, resourceKind resource.Kind, ch chan<- state.Event, opts ...state.WatchKindOption) error {
+	return st.watchKind(ctx, resourceKind, ch, nil, opts...)
+}
+
+// WatchKindAggregated all resources by type.
+func (st *State) WatchKindAggregated(ctx context.Context, resourceKind resource.Kind, ch chan<- []state.Event, opts ...state.WatchKindOption) error {
+	return st.watchKind(ctx, resourceKind, nil, ch, opts...)
+}
+
+//nolint:gocyclo,cyclop,gocognit,maintidx
+func (st *State) watchKind(ctx context.Context, resourceKind resource.Kind, singleCh chan<- state.Event, aggCh chan<- []state.Event, opts ...state.WatchKindOption) error {
 	ctx = st.clearIncomingContext(ctx)
 
 	var options state.WatchKindOptions
@@ -510,28 +519,40 @@ func (st *State) WatchKind(ctx context.Context, resourceKind resource.Kind, ch c
 	go func() {
 		defer cancel()
 
-		// send initial contents if they were captured
-		for _, res := range bootstrapList {
-			if !channel.SendWithContext(ctx, ch,
-				state.Event{
-					Type:     state.Created,
-					Resource: res,
-				},
-			) {
-				return
-			}
-		}
-
-		bootstrapList = nil
-
 		if options.BootstrapContents {
-			if !channel.SendWithContext(ctx, ch,
-				state.Event{
-					Type: state.Bootstrapped,
-				},
-			) {
-				return
+			switch {
+			case singleCh != nil:
+				for _, res := range bootstrapList {
+					if !channel.SendWithContext(ctx, singleCh,
+						state.Event{
+							Type:     state.Created,
+							Resource: res,
+						},
+					) {
+						return
+					}
+				}
+
+				if !channel.SendWithContext(ctx, singleCh, state.Event{Type: state.Bootstrapped}) {
+					return
+				}
+			case aggCh != nil:
+				events := slices.Map(bootstrapList, func(r resource.Resource) state.Event {
+					return state.Event{
+						Type:     state.Created,
+						Resource: r,
+					}
+				})
+
+				events = append(events, state.Event{Type: state.Bootstrapped})
+
+				if !channel.SendWithContext(ctx, aggCh, events) {
+					return
+				}
 			}
+
+			// make the list nil so that it gets GC'ed, we don't need it anymore after this point
+			bootstrapList = nil
 		}
 
 		for {
@@ -551,12 +572,17 @@ func (st *State) WatchKind(ctx context.Context, resourceKind resource.Kind, ch c
 			}
 
 			if watchResponse.Err() != nil {
-				channel.SendWithContext(ctx, ch,
-					state.Event{
-						Type:  state.Errored,
-						Error: watchResponse.Err(),
-					},
-				)
+				watchErrorEvent := state.Event{
+					Type:  state.Errored,
+					Error: watchResponse.Err(),
+				}
+
+				switch {
+				case singleCh != nil:
+					channel.SendWithContext(ctx, singleCh, watchErrorEvent)
+				case aggCh != nil:
+					channel.SendWithContext(ctx, aggCh, []state.Event{watchErrorEvent})
+				}
 
 				return
 			}
@@ -564,6 +590,8 @@ func (st *State) WatchKind(ctx context.Context, resourceKind resource.Kind, ch c
 			if watchResponse.Canceled {
 				return
 			}
+
+			events := make([]state.Event, 0, len(watchResponse.Events))
 
 			for _, etcdEvent := range watchResponse.Events {
 				// watch event might come for a revision which was already sent in the bootstrapped set, ignore it
@@ -573,12 +601,17 @@ func (st *State) WatchKind(ctx context.Context, resourceKind resource.Kind, ch c
 
 				event, err := st.convertEvent(etcdEvent)
 				if err != nil {
-					channel.SendWithContext(ctx, ch,
-						state.Event{
-							Type:  state.Errored,
-							Error: err,
-						},
-					)
+					convertErrorEvent := state.Event{
+						Type:  state.Errored,
+						Error: err,
+					}
+
+					switch {
+					case singleCh != nil:
+						channel.SendWithContext(ctx, singleCh, convertErrorEvent)
+					case aggCh != nil:
+						channel.SendWithContext(ctx, aggCh, []state.Event{convertErrorEvent})
+					}
 
 					return
 				}
@@ -611,8 +644,23 @@ func (st *State) WatchKind(ctx context.Context, resourceKind resource.Kind, ch c
 					panic("should never be reached")
 				}
 
-				if !channel.SendWithContext(ctx, ch, event) {
+				events = append(events, event)
+			}
+
+			if len(events) == 0 {
+				continue
+			}
+
+			switch {
+			case aggCh != nil:
+				if !channel.SendWithContext(ctx, aggCh, events) {
 					return
+				}
+			case singleCh != nil:
+				for _, event := range events {
+					if !channel.SendWithContext(ctx, singleCh, event) {
+						return
+					}
 				}
 			}
 		}
