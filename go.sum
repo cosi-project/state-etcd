@@ -39,8 +39,8 @@ github.com/coreos/go-semver v0.3.0 h1:wkHLiw0WNATZnSG7epLsujiMCgPAc9xhjJ4tgnAxmf
 github.com/coreos/go-semver v0.3.0/go.mod h1:nnelYz7RCh+5ahJtPPxZlU+153eP4D4r3EedlOD2RNk=
 github.com/coreos/go-systemd/v22 v22.3.2 h1:D9/bQk5vlXQFZ6Kwuu6zaiXJ9oTPe68++AzAJc1DzSI=
 github.com/coreos/go-systemd/v22 v22.3.2/go.mod h1:Y58oyj3AT4RCenI/lSvhwexgC+NSVTIJ3seZv2GcEnc=
-github.com/cosi-project/runtime v0.3.0-alpha.10 h1:WMk620imAuRTDeEPkwyAXu6lR59FdJNq9CpaWu5lsU0=
-github.com/cosi-project/runtime v0.3.0-alpha.10/go.mod h1:BBFzt+ANf4BSlVGIbemVuz+Hql8F3tveWaWoErUi0lY=
+github.com/cosi-project/runtime v0.3.0 h1:f8++A7HUu7pQv9G3IhQworfA4TFLdzGWl3W+jLQF3Oo=
+github.com/cosi-project/runtime v0.3.0/go.mod h1:BBFzt+ANf4BSlVGIbemVuz+Hql8F3tveWaWoErUi0lY=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
