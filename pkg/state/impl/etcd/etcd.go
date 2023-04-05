@@ -70,14 +70,19 @@ func (st *State) Get(ctx context.Context, resourcePointer resource.Pointer, opts
 
 	resp, err := st.cli.Get(ctx, etcdKey)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("etcd call failed on get %q: %w", resourcePointer, err)
 	}
 
 	if len(resp.Kvs) == 0 {
-		return nil, ErrNotFound(resourcePointer)
+		return nil, fmt.Errorf("failed to get: %w", ErrNotFound(resourcePointer))
 	}
 
-	return st.unmarshalResource(resp.Kvs[0])
+	unmarshaled, err := st.unmarshalResource(resp.Kvs[0])
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal on get %q: %w", resourcePointer, err)
+	}
+
+	return unmarshaled, nil
 }
 
 // List resources.
@@ -94,7 +99,7 @@ func (st *State) List(ctx context.Context, resourceKind resource.Kind, opts ...s
 
 	resp, err := st.cli.Get(ctx, etcdKey, clientv3.WithPrefix())
 	if err != nil {
-		return resource.List{}, err
+		return resource.List{}, fmt.Errorf("etcd call failed on list %q: %w", resourceKind, err)
 	}
 
 	resources := make([]resource.Resource, 0, len(resp.Kvs))
@@ -102,7 +107,7 @@ func (st *State) List(ctx context.Context, resourceKind resource.Kind, opts ...s
 	for _, kv := range resp.Kvs {
 		res, err := st.unmarshalResource(kv)
 		if err != nil {
-			return resource.List{}, err
+			return resource.List{}, fmt.Errorf("failed to unmarshal on list %q: %w", resourceKind, err)
 		}
 
 		if !options.LabelQuery.Matches(*res.Metadata().Labels()) {
@@ -140,14 +145,14 @@ func (st *State) Create(ctx context.Context, res resource.Resource, opts ...stat
 	etcdKey := st.etcdKeyFromPointer(resCopy.Metadata())
 
 	if err := resCopy.Metadata().SetOwner(options.Owner); err != nil {
-		return err
+		return fmt.Errorf("failed to set owner on create %q: %w", resCopy.Metadata(), err)
 	}
 
 	resCopy.Metadata().SetCreated(time.Now())
 
 	data, err := st.marshaler.MarshalResource(resCopy)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to marshal on create %q: %w", resCopy.Metadata(), err)
 	}
 
 	txnResp, err := st.cli.Txn(ctx).If(
@@ -157,18 +162,18 @@ func (st *State) Create(ctx context.Context, res resource.Resource, opts ...stat
 		clientv3.OpGet(etcdKey),
 	).Commit()
 	if err != nil {
-		return err
+		return fmt.Errorf("etcd call failed on create %q: %w", resCopy.Metadata(), err)
 	}
 
 	if !txnResp.Succeeded {
-		return ErrAlreadyExists(resCopy.Metadata())
+		return fmt.Errorf("failed to create: %w", ErrAlreadyExists(resCopy.Metadata()))
 	}
 
 	versionStr := strconv.FormatInt(txnResp.Responses[1].GetResponseRange().Kvs[0].Version, 10)
 
 	version, err := resource.ParseVersion(versionStr)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to parse version in etcd on create %q: %w", resCopy.Metadata(), err)
 	}
 
 	resCopy.Metadata().SetVersion(version)
@@ -195,16 +200,16 @@ func (st *State) Update(ctx context.Context, res resource.Resource, opts ...stat
 
 	getResp, err := st.cli.Get(ctx, etcdKey)
 	if err != nil {
-		return err
+		return fmt.Errorf("etcd call failed on update %q: %w", resCopy.Metadata(), err)
 	}
 
 	if len(getResp.Kvs) == 0 {
-		return ErrNotFound(resCopy.Metadata())
+		return fmt.Errorf("failed to update: %w", ErrNotFound(resCopy.Metadata()))
 	}
 
 	curResource, err := st.unmarshalResource(getResp.Kvs[0])
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to unmarshal on update %q: %w", resCopy.Metadata(), err)
 	}
 
 	updated := time.Now()
@@ -214,7 +219,7 @@ func (st *State) Update(ctx context.Context, res resource.Resource, opts ...stat
 
 	data, err := st.marshaler.MarshalResource(resCopy)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to marshal on update %q: %w", resCopy.Metadata(), err)
 	}
 
 	expectedVersion := int64(resCopy.Metadata().Version().Value())
@@ -222,15 +227,15 @@ func (st *State) Update(ctx context.Context, res resource.Resource, opts ...stat
 	etcdVersion := getResp.Kvs[0].Version
 
 	if etcdVersion != expectedVersion {
-		return ErrVersionConflict(curResource.Metadata(), expectedVersion, etcdVersion)
+		return fmt.Errorf("failed to update: %w", ErrVersionConflict(curResource.Metadata(), expectedVersion, etcdVersion))
 	}
 
 	if curResource.Metadata().Owner() != options.Owner {
-		return ErrOwnerConflict(curResource.Metadata(), curResource.Metadata().Owner())
+		return fmt.Errorf("failed to update: %w", ErrOwnerConflict(curResource.Metadata(), curResource.Metadata().Owner()))
 	}
 
 	if options.ExpectedPhase != nil && curResource.Metadata().Phase() != *options.ExpectedPhase {
-		return ErrPhaseConflict(curResource.Metadata(), *options.ExpectedPhase)
+		return fmt.Errorf("failed to update: %w", ErrPhaseConflict(curResource.Metadata(), *options.ExpectedPhase))
 	}
 
 	txnResp, err := st.cli.Txn(ctx).If(
@@ -242,7 +247,7 @@ func (st *State) Update(ctx context.Context, res resource.Resource, opts ...stat
 		clientv3.OpGet(etcdKey),
 	).Commit()
 	if err != nil {
-		return err
+		return fmt.Errorf("etcd call failed on update %q: %w", resCopy.Metadata(), err)
 	}
 
 	if !txnResp.Succeeded {
@@ -253,14 +258,14 @@ func (st *State) Update(ctx context.Context, res resource.Resource, opts ...stat
 			foundVersion = txnGetKvs[0].Version
 		}
 
-		return ErrVersionConflict(resCopy.Metadata(), expectedVersion, foundVersion)
+		return fmt.Errorf("failed to update: %w", ErrVersionConflict(resCopy.Metadata(), expectedVersion, foundVersion))
 	}
 
 	versionStr := strconv.FormatInt(txnResp.Responses[1].GetResponseRange().Kvs[0].Version, 10)
 
 	version, err := resource.ParseVersion(versionStr)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to parse version in etcd on update %q: %w", resCopy.Metadata(), err)
 	}
 
 	resCopy.Metadata().SetVersion(version)
@@ -285,26 +290,26 @@ func (st *State) Destroy(ctx context.Context, resourcePointer resource.Pointer, 
 
 	resp, err := st.cli.Get(ctx, etcdKey)
 	if err != nil {
-		return err
+		return fmt.Errorf("etcd call failed on destroy %q: %w", resourcePointer, err)
 	}
 
 	if len(resp.Kvs) == 0 {
-		return ErrNotFound(resourcePointer)
+		return fmt.Errorf("failed to destroy: %w", ErrNotFound(resourcePointer))
 	}
 
 	etcdVersion := resp.Kvs[0].Version
 
 	curResource, err := st.unmarshalResource(resp.Kvs[0])
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to unmarshal on destroy %q: %w", resourcePointer, err)
 	}
 
 	if curResource.Metadata().Owner() != options.Owner {
-		return ErrOwnerConflict(curResource.Metadata(), curResource.Metadata().Owner())
+		return fmt.Errorf("failed to destroy: %w", ErrOwnerConflict(curResource.Metadata(), curResource.Metadata().Owner()))
 	}
 
 	if !curResource.Metadata().Finalizers().Empty() {
-		return ErrPendingFinalizers(*curResource.Metadata())
+		return fmt.Errorf("failed to destroy: %w", ErrPendingFinalizers(*curResource.Metadata()))
 	}
 
 	txnResp, err := st.cli.Txn(ctx).If(
@@ -315,7 +320,7 @@ func (st *State) Destroy(ctx context.Context, resourcePointer resource.Pointer, 
 		clientv3.OpGet(etcdKey),
 	).Commit()
 	if err != nil {
-		return err
+		return fmt.Errorf("etcd call failed on destroy %q: %w", resourcePointer, err)
 	}
 
 	if txnResp.Succeeded {
@@ -329,7 +334,7 @@ func (st *State) Destroy(ctx context.Context, resourcePointer resource.Pointer, 
 		foundVersion = txnGetKvs[0].Version
 	}
 
-	return ErrVersionConflict(resourcePointer, etcdVersion, foundVersion)
+	return fmt.Errorf("failed to destroy: %w", ErrVersionConflict(resourcePointer, etcdVersion, foundVersion))
 }
 
 // Watch a resource.
@@ -345,7 +350,7 @@ func (st *State) Watch(ctx context.Context, resourcePointer resource.Pointer, ch
 	}
 
 	if options.TailEvents > 0 {
-		return ErrUnsupported("tailEvents")
+		return fmt.Errorf("failed to watch: %w", ErrUnsupported("tailEvents"))
 	}
 
 	etcdKey := st.etcdKeyFromPointer(resourcePointer)
@@ -357,7 +362,7 @@ func (st *State) Watch(ctx context.Context, resourcePointer resource.Pointer, ch
 
 	getResp, err := st.cli.Get(ctx, etcdKey)
 	if err != nil {
-		return err
+		return fmt.Errorf("etcd call failed on watch %q: %w", resourcePointer, err)
 	}
 
 	var initialEvent state.Event
@@ -365,7 +370,7 @@ func (st *State) Watch(ctx context.Context, resourcePointer resource.Pointer, ch
 	if len(getResp.Kvs) > 0 {
 		curResource, err = st.unmarshalResource(getResp.Kvs[0])
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to unmarshal on watch %q: %w", resourcePointer, err)
 		}
 
 		initialEvent.Resource = curResource
@@ -452,16 +457,16 @@ func (st *State) Watch(ctx context.Context, resourcePointer resource.Pointer, ch
 
 // WatchKind all resources by type.
 func (st *State) WatchKind(ctx context.Context, resourceKind resource.Kind, ch chan<- state.Event, opts ...state.WatchKindOption) error {
-	return st.watchKind(ctx, resourceKind, ch, nil, opts...)
+	return st.watchKind(ctx, resourceKind, ch, nil, "watchKind", opts...)
 }
 
 // WatchKindAggregated all resources by type.
 func (st *State) WatchKindAggregated(ctx context.Context, resourceKind resource.Kind, ch chan<- []state.Event, opts ...state.WatchKindOption) error {
-	return st.watchKind(ctx, resourceKind, nil, ch, opts...)
+	return st.watchKind(ctx, resourceKind, nil, ch, "watchKindAggregated", opts...)
 }
 
 //nolint:gocyclo,cyclop,gocognit,maintidx
-func (st *State) watchKind(ctx context.Context, resourceKind resource.Kind, singleCh chan<- state.Event, aggCh chan<- []state.Event, opts ...state.WatchKindOption) error {
+func (st *State) watchKind(ctx context.Context, resourceKind resource.Kind, singleCh chan<- state.Event, aggCh chan<- []state.Event, opName string, opts ...state.WatchKindOption) error {
 	ctx = st.clearIncomingContext(ctx)
 
 	var options state.WatchKindOptions
@@ -475,7 +480,7 @@ func (st *State) watchKind(ctx context.Context, resourceKind resource.Kind, sing
 	}
 
 	if options.TailEvents > 0 {
-		return ErrUnsupported("tailEvents")
+		return fmt.Errorf("failed to %s: %w", opName, ErrUnsupported("tailEvents"))
 	}
 
 	etcdKey := st.etcdKeyPrefixFromKind(resourceKind)
@@ -487,7 +492,7 @@ func (st *State) watchKind(ctx context.Context, resourceKind resource.Kind, sing
 	if options.BootstrapContents {
 		getResp, err := st.cli.Get(ctx, etcdKey, clientv3.WithPrefix())
 		if err != nil {
-			return err
+			return fmt.Errorf("etcd call failed on %s %q: %w", opName, resourceKind, err)
 		}
 
 		revision = getResp.Header.Revision
@@ -495,7 +500,7 @@ func (st *State) watchKind(ctx context.Context, resourceKind resource.Kind, sing
 		for _, kv := range getResp.Kvs {
 			res, err := st.unmarshalResource(kv)
 			if err != nil {
-				return err
+				return fmt.Errorf("failed to unmarshal on %s %q: %w", opName, resourceKind, err)
 			}
 
 			if !matches(res) {
