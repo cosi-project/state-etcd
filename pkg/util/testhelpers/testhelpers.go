@@ -34,8 +34,8 @@ func WithEtcd(t *testing.T, f func(*clientv3.Client)) {
 		t.Fatalf("failed to parse URL: %v", err)
 	}
 
-	cfg.LPUrls = []url.URL{*peerURL}
-	cfg.LCUrls = []url.URL{*clientURL}
+	cfg.ListenPeerUrls = []url.URL{*peerURL}
+	cfg.ListenClientUrls = []url.URL{*clientURL}
 
 	e, err := embed.StartEtcd(cfg)
 	if err != nil {
