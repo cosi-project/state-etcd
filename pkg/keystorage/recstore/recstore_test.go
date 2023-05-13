@@ -75,6 +75,7 @@ func TestRecStore(t *testing.T) {
 		require.NoError(t, err)
 
 		got, err = st.Get(context.Background())
+		require.Zero(t, got)
 		require.Regexp(t, "error unmarshaling data for .* fail to unmarshal data", err)
 	})
 }
