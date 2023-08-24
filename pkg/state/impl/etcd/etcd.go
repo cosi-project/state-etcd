@@ -16,7 +16,7 @@ import (
 	"github.com/cosi-project/runtime/pkg/state"
 	"github.com/cosi-project/runtime/pkg/state/impl/store"
 	"github.com/siderolabs/gen/channel"
-	"github.com/siderolabs/gen/slices"
+	"github.com/siderolabs/gen/xslices"
 	"go.etcd.io/etcd/api/v3/mvccpb"
 	clientv3 "go.etcd.io/etcd/client/v3"
 
@@ -110,7 +110,7 @@ func (st *State) List(ctx context.Context, resourceKind resource.Kind, opts ...s
 			return resource.List{}, fmt.Errorf("failed to unmarshal on list %q: %w", resourceKind, err)
 		}
 
-		if !options.LabelQuery.Matches(*res.Metadata().Labels()) {
+		if !options.LabelQueries.Matches(*res.Metadata().Labels()) {
 			continue
 		}
 
@@ -476,7 +476,7 @@ func (st *State) watchKind(ctx context.Context, resourceKind resource.Kind, sing
 	}
 
 	matches := func(res resource.Resource) bool {
-		return options.LabelQuery.Matches(*res.Metadata().Labels()) && options.IDQuery.Matches(*res.Metadata())
+		return options.LabelQueries.Matches(*res.Metadata().Labels()) && options.IDQuery.Matches(*res.Metadata())
 	}
 
 	if options.TailEvents > 0 {
@@ -542,7 +542,7 @@ func (st *State) watchKind(ctx context.Context, resourceKind resource.Kind, sing
 					return
 				}
 			case aggCh != nil:
-				events := slices.Map(bootstrapList, func(r resource.Resource) state.Event {
+				events := xslices.Map(bootstrapList, func(r resource.Resource) state.Event {
 					return state.Event{
 						Type:     state.Created,
 						Resource: r,
