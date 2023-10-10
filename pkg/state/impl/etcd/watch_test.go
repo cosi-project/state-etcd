@@ -15,11 +15,10 @@ import (
 	"github.com/cosi-project/runtime/pkg/state/conformance"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/goleak"
 )
 
 func TestWatchKindWithBootstrap(t *testing.T) {
-	t.Parallel()
-
 	for _, test := range []struct {
 		name                      string
 		destroyIsTheLastOperation bool
@@ -36,7 +35,7 @@ func TestWatchKindWithBootstrap(t *testing.T) {
 		test := test
 
 		t.Run(test.name, func(t *testing.T) {
-			t.Parallel()
+			defer goleak.VerifyNone(t, goleak.IgnoreCurrent())
 
 			withEtcd(t, func(s state.State) {
 				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

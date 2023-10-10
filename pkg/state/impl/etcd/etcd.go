@@ -395,6 +395,11 @@ func (st *State) Watch(ctx context.Context, resourcePointer resource.Pointer, ch
 	watchCh := st.cli.Watch(ctx, etcdKey, clientv3.WithPrevKV(), clientv3.WithRev(revision))
 
 	go func() {
+		defer func() {
+			// drain the watchCh, etcd Watch API guarantees that the channel is closed when the watcher is canceled
+			for range watchCh { //nolint:revive
+			}
+		}()
 		defer cancel()
 
 		if !channel.SendWithContext(ctx, ch, initialEvent) {
@@ -522,6 +527,11 @@ func (st *State) watchKind(ctx context.Context, resourceKind resource.Kind, sing
 	watchCh := st.cli.Watch(ctx, etcdKey, clientv3.WithPrefix(), clientv3.WithPrevKV(), clientv3.WithRev(revision))
 
 	go func() {
+		defer func() {
+			// drain the watchCh, etcd Watch API guarantees that the channel is closed when the watcher is canceled
+			for range watchCh { //nolint:revive
+			}
+		}()
 		defer cancel()
 
 		if options.BootstrapContents {

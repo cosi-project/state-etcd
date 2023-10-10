@@ -11,10 +11,11 @@ import (
 	"github.com/cosi-project/runtime/pkg/state"
 	"github.com/cosi-project/runtime/pkg/state/conformance"
 	"github.com/stretchr/testify/suite"
+	"go.uber.org/goleak"
 )
 
 func TestEtcdConformance(t *testing.T) {
-	t.Parallel()
+	defer goleak.VerifyNone(t, goleak.IgnoreCurrent())
 
 	withEtcd(t, func(s state.State) {
 		suite.Run(t, &conformance.StateSuite{
