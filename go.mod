@@ -3,7 +3,7 @@ module github.com/cosi-project/state-etcd
 go 1.21.0
 
 require (
-	github.com/cosi-project/runtime v0.3.11
+	github.com/cosi-project/runtime v0.3.14
 	github.com/siderolabs/gen v0.4.7
 	github.com/stretchr/testify v1.8.4
 	go.etcd.io/etcd/api/v3 v3.5.9
@@ -31,9 +31,6 @@ require (
 	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0 // indirect
 	github.com/grpc-ecosystem/grpc-gateway v1.16.0 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.18.0 // indirect
-	github.com/hashicorp/go-immutable-radix v1.3.0 // indirect
-	github.com/hashicorp/go-memdb v1.3.4 // indirect
-	github.com/hashicorp/golang-lru v0.5.4 // indirect
 	github.com/jonboulle/clockwork v0.2.2 // indirect
 	github.com/json-iterator/go v1.1.11 // indirect
 	github.com/matttproud/golang_protobuf_extensions v1.0.1 // indirect
