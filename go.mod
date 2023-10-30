@@ -9,7 +9,7 @@ require (
 	go.etcd.io/etcd/api/v3 v3.5.9
 	go.etcd.io/etcd/client/v3 v3.5.9
 	go.etcd.io/etcd/server/v3 v3.5.9
-	go.uber.org/goleak v1.2.1
+	go.uber.org/goleak v1.3.0
 	google.golang.org/grpc v1.58.2
 )
 
