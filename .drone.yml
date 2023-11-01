@@ -1,7 +1,7 @@
 ---
 # THIS FILE WAS AUTOMATICALLY GENERATED, PLEASE DO NOT EDIT.
 #
-# Generated on 2023-06-05T13:31:12Z by kres latest.
+# Generated on 2023-11-01T20:14:53Z by kres latest.
 
 kind: pipeline
 type: kubernetes
@@ -155,7 +155,7 @@ steps:
     - sha512
     draft: true
     files:
-    - _out/*
+    []
     note: _out/RELEASE_NOTES.md
   volumes:
   - name: outer-docker-socket
@@ -184,6 +184,8 @@ services:
   - --log-level=error
   privileged: true
   volumes:
+  - name: dev
+    path: /dev
   - name: outer-docker-socket
     path: /var/outer-run
   - name: docker-socket
@@ -206,6 +208,9 @@ volumes:
 - name: ssh
   temp:
     medium: memory
+- name: dev
+  host:
+    path: /dev
 
 trigger:
   branch:
