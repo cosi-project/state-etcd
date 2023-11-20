@@ -3,7 +3,7 @@ module github.com/cosi-project/state-etcd
 go 1.21.3
 
 require (
-	github.com/cosi-project/runtime v0.3.16
+	github.com/cosi-project/runtime v0.3.17
 	github.com/siderolabs/gen v0.4.7
 	github.com/stretchr/testify v1.8.4
 	go.etcd.io/etcd/api/v3 v3.5.10
