@@ -548,7 +548,13 @@ func (st *State) watchKind(ctx context.Context, resourceKind resource.Kind, sing
 					}
 				}
 
-				if !channel.SendWithContext(ctx, singleCh, state.Event{Type: state.Bootstrapped}) {
+				if !channel.SendWithContext(
+					ctx, singleCh,
+					state.Event{
+						Type:     state.Bootstrapped,
+						Resource: resource.NewTombstone(resource.NewMetadata(resourceKind.Namespace(), resourceKind.Type(), "", resource.VersionUndefined)),
+					},
+				) {
 					return
 				}
 			case aggCh != nil:
@@ -559,7 +565,10 @@ func (st *State) watchKind(ctx context.Context, resourceKind resource.Kind, sing
 					}
 				})
 
-				events = append(events, state.Event{Type: state.Bootstrapped})
+				events = append(events, state.Event{
+					Type:     state.Bootstrapped,
+					Resource: resource.NewTombstone(resource.NewMetadata(resourceKind.Namespace(), resourceKind.Type(), "", resource.VersionUndefined)),
+				})
 
 				if !channel.SendWithContext(ctx, aggCh, events) {
 					return
