@@ -6,7 +6,7 @@ require (
 	github.com/cosi-project/runtime v0.4.0-alpha.2
 	github.com/siderolabs/gen v0.4.7
 	github.com/stretchr/testify v1.8.4
-	go.etcd.io/etcd/api/v3 v3.5.11
+	go.etcd.io/etcd/api/v3 v3.5.12
 	go.etcd.io/etcd/client/v3 v3.5.11
 	go.etcd.io/etcd/server/v3 v3.5.11
 	go.uber.org/goleak v1.3.0
