@@ -6,8 +6,8 @@ require (
 	github.com/cosi-project/runtime v0.4.0-alpha.2
 	github.com/siderolabs/gen v0.4.7
 	github.com/stretchr/testify v1.8.4
-	go.etcd.io/etcd/api/v3 v3.5.11
-	go.etcd.io/etcd/client/v3 v3.5.11
+	go.etcd.io/etcd/api/v3 v3.5.12
+	go.etcd.io/etcd/client/v3 v3.5.12
 	go.etcd.io/etcd/server/v3 v3.5.11
 	go.uber.org/goleak v1.3.0
 	google.golang.org/grpc v1.61.0
@@ -52,7 +52,7 @@ require (
 	github.com/tmc/grpc-websocket-proxy v0.0.0-20201229170055-e5319fda7802 // indirect
 	github.com/xiang90/probing v0.0.0-20190116061207-43a291ad63a2 // indirect
 	go.etcd.io/bbolt v1.3.8 // indirect
-	go.etcd.io/etcd/client/pkg/v3 v3.5.11 // indirect
+	go.etcd.io/etcd/client/pkg/v3 v3.5.12 // indirect
 	go.etcd.io/etcd/client/v2 v2.305.11 // indirect
 	go.etcd.io/etcd/pkg/v3 v3.5.11 // indirect
 	go.etcd.io/etcd/raft/v3 v3.5.11 // indirect
