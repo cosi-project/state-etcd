@@ -32,8 +32,6 @@ func TestWatchKindWithBootstrap(t *testing.T) {
 			destroyIsTheLastOperation: true,
 		},
 	} {
-		test := test
-
 		t.Run(test.name, func(t *testing.T) {
 			defer goleak.VerifyNone(t, goleak.IgnoreCurrent())
 
@@ -41,7 +39,7 @@ func TestWatchKindWithBootstrap(t *testing.T) {
 				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 				defer cancel()
 
-				for i := 0; i < 3; i++ {
+				for i := range 3 {
 					require.NoError(t, s.Create(ctx, conformance.NewPathResource("default", fmt.Sprintf("path-%d", i))))
 				}
 
@@ -54,7 +52,7 @@ func TestWatchKindWithBootstrap(t *testing.T) {
 
 				require.NoError(t, s.WatchKind(ctx, conformance.NewPathResource("default", "").Metadata(), watchCh, state.WithBootstrapContents(true)))
 
-				for i := 0; i < 3; i++ {
+				for i := range 3 {
 					select {
 					case <-time.After(time.Second):
 						t.Fatal("timeout waiting for event")

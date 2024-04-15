@@ -1,8 +1,8 @@
-# syntax = docker/dockerfile-upstream:1.6.0-labs
+# syntax = docker/dockerfile-upstream:1.7.0-labs
 
 # THIS FILE WAS AUTOMATICALLY GENERATED, PLEASE DO NOT EDIT.
 #
-# Generated on 2024-02-28T14:47:03Z by kres latest.
+# Generated on 2024-04-15T16:04:02Z by kres 92eef68.
 
 ARG TOOLCHAIN
 
@@ -10,7 +10,7 @@ ARG TOOLCHAIN
 FROM scratch AS generate
 
 # runs markdownlint
-FROM docker.io/node:21.6.2-alpine3.19 AS lint-markdown
+FROM docker.io/node:21.7.1-alpine3.19 AS lint-markdown
 WORKDIR /src
 RUN npm i -g markdownlint-cli@0.39.0
 RUN npm i sentences-per-line@0.2.1
@@ -71,6 +71,7 @@ FROM base AS lint-golangci-lint
 WORKDIR /src
 COPY .golangci.yml .
 ENV GOGC 50
+RUN golangci-lint config verify --config .golangci.yml
 RUN --mount=type=cache,target=/root/.cache/go-build --mount=type=cache,target=/root/.cache/golangci-lint --mount=type=cache,target=/go/pkg golangci-lint run --config .golangci.yml
 
 # runs govulncheck
