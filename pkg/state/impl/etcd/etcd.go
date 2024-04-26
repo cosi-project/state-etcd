@@ -438,6 +438,10 @@ func (st *State) Watch(ctx context.Context, resourcePointer resource.Pointer, ch
 			}
 
 			for _, etcdEvent := range watchResponse.Events {
+				if etcdEvent.Kv != nil && etcdEvent.Kv.ModRevision <= revision {
+					continue
+				}
+
 				event, err := st.convertEvent(etcdEvent)
 				if err != nil {
 					channel.SendWithContext(ctx, ch,
