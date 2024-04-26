@@ -15,6 +15,8 @@ import (
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.etcd.io/etcd/server/v3/embed"
 	"go.etcd.io/etcd/server/v3/etcdserver/api/v3client"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest"
 )
 
 // WithEtcd runs the test with an embedded etcd server.
@@ -23,6 +25,16 @@ func WithEtcd(t *testing.T, f func(*clientv3.Client)) {
 
 	cfg := embed.NewConfig()
 	cfg.Dir = tempDir
+
+	cfg.EnableGRPCGateway = false
+	cfg.LogLevel = "info"
+	cfg.ZapLoggerBuilder = embed.NewZapLoggerBuilder(zaptest.NewLogger(t, zaptest.Level(zap.InfoLevel)))
+	cfg.AuthToken = ""
+	cfg.AutoCompactionMode = "periodic"
+	cfg.AutoCompactionRetention = "5h"
+	cfg.ExperimentalCompactHashCheckEnabled = true
+	cfg.ExperimentalInitialCorruptCheck = true
+	cfg.UnsafeNoFsync = true
 
 	peerURL, err := url.Parse("http://localhost:0")
 	if err != nil {
@@ -54,9 +66,12 @@ func WithEtcd(t *testing.T, f func(*clientv3.Client)) {
 	defer func() {
 		e.Close()
 
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+
 		select {
 		case <-e.Server.StopNotify():
-		case <-ctx.Done():
+		case <-shutdownCtx.Done():
 			t.Fatalf("etcd failed to stop")
 		}
 	}()
