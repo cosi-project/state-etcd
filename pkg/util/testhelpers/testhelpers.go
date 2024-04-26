@@ -14,7 +14,6 @@ import (
 
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.etcd.io/etcd/server/v3/embed"
-	"go.etcd.io/etcd/server/v3/etcdserver/api/v3client"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest"
 )
@@ -28,7 +27,15 @@ func WithEtcd(t *testing.T, f func(*clientv3.Client)) {
 
 	cfg.EnableGRPCGateway = false
 	cfg.LogLevel = "info"
-	cfg.ZapLoggerBuilder = embed.NewZapLoggerBuilder(zaptest.NewLogger(t, zaptest.Level(zap.InfoLevel)))
+	cfg.ZapLoggerBuilder = embed.NewZapLoggerBuilder(
+		zaptest.NewLogger(
+			t,
+			zaptest.Level(zap.InfoLevel),
+			zaptest.WrapOptions(
+				zap.Fields(zap.String("component", "etcd-server")),
+			),
+		),
+	)
 	cfg.AuthToken = ""
 	cfg.AutoCompactionMode = "periodic"
 	cfg.AutoCompactionRetention = "5h"
@@ -76,7 +83,20 @@ func WithEtcd(t *testing.T, f func(*clientv3.Client)) {
 		}
 	}()
 
-	cli := v3client.New(e.Server)
+	cli, err := clientv3.New(clientv3.Config{
+		Endpoints:   []string{e.Clients[0].Addr().String()},
+		DialTimeout: time.Second,
+		Logger: zaptest.NewLogger(
+			t,
+			zaptest.Level(zap.InfoLevel),
+			zaptest.WrapOptions(
+				zap.Fields(zap.String("component", "etcd-client")),
+			),
+		),
+	})
+	if err != nil {
+		t.Fatalf("failed to create etcd client: %v", err)
+	}
 
 	defer func() {
 		err := cli.Close()

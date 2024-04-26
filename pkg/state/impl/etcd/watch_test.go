@@ -145,3 +145,85 @@ func TestWatchSpuriousEvents(t *testing.T) {
 		}
 	})
 }
+
+func TestWatchDeadCancel(t *testing.T) {
+	t.Cleanup(func() { goleak.VerifyNone(t, goleak.IgnoreCurrent()) })
+
+	withEtcd(t, func(s state.State) {
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+
+		const N = 50
+
+		// the key to reproduce the bug is to create enough watchers (>25 seems to be enough),
+		// and cancel all of them at the same time
+		// after that trigger a couple of updates, and the next Watch will hang forever
+		deadCtx, deadCancel := context.WithCancel(ctx)
+		deadCh := make(chan state.Event)
+
+		for range N {
+			require.NoError(t, s.Watch(deadCtx, conformance.NewPathResource("default", "path-0").Metadata(), deadCh))
+		}
+
+		t.Log("dead cancel!")
+		deadCancel()
+
+		require.NoError(t, s.Create(ctx, conformance.NewPathResource("default", "path-0")))
+		require.NoError(t, s.Destroy(ctx, conformance.NewPathResource("default", "path-0").Metadata()))
+
+		watchCh := make(chan state.Event)
+
+		// when the bug is triggered, s.Watch will hang forever
+		//
+		// the bug seems to be related to etcd client `*watcher` object getting into a deadlock
+		// the bug doesn't reproduce if we use a real gRPC connection for the embedded etcd instead of "passthrough" mode
+		require.NoError(t, s.Watch(ctx, conformance.NewPathResource("default", "path-0").Metadata(), watchCh))
+
+		select {
+		case <-time.After(time.Second):
+			t.Fatal("timeout waiting for event")
+		case ev := <-watchCh:
+			assert.Equal(t, state.Destroyed, ev.Type, "ev: %v", ev.Resource)
+		}
+
+		for range N {
+			require.NoError(t, s.Create(ctx, conformance.NewPathResource("default", "path-0")))
+
+			select {
+			case <-time.After(time.Second):
+				t.Fatal("timeout waiting for event")
+			case ev := <-watchCh:
+				assert.Equal(t, state.Created, ev.Type)
+			}
+
+			require.NoError(t, s.Destroy(ctx, conformance.NewPathResource("default", "path-0").Metadata()))
+
+			select {
+			case <-time.After(time.Second):
+				t.Fatal("timeout waiting for event")
+			case ev := <-watchCh:
+				assert.Equal(t, state.Destroyed, ev.Type, "ev: %v", ev.Resource)
+			}
+		}
+
+		for i := range N {
+			require.NoError(t, s.Create(ctx, conformance.NewPathResource("default", "path-0")))
+
+			select {
+			case <-time.After(time.Second):
+				t.Fatalf("timeout waiting for event iteration %d", i)
+			case ev := <-watchCh:
+				assert.Equal(t, state.Created, ev.Type)
+			}
+
+			require.NoError(t, s.Destroy(ctx, conformance.NewPathResource("default", "path-0").Metadata()))
+
+			select {
+			case <-time.After(time.Second):
+				t.Fatal("timeout waiting for event")
+			case ev := <-watchCh:
+				assert.Equal(t, state.Destroyed, ev.Type, "ev: %v", ev.Resource)
+			}
+		}
+	})
+}
