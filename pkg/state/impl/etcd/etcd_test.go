@@ -14,7 +14,9 @@ import (
 	"github.com/cosi-project/runtime/pkg/state/conformance"
 	"github.com/cosi-project/runtime/pkg/state/impl/store"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	clientv3 "go.etcd.io/etcd/client/v3"
+	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc/metadata"
 
 	"github.com/cosi-project/state-etcd/pkg/state/impl/etcd"
@@ -54,6 +56,35 @@ func TestPreserveCreated(t *testing.T) {
 		assert.NoError(t, err)
 
 		assert.Equal(t, got.Metadata().Created(), result.Metadata().Created())
+	})
+}
+
+func TestDestroy(t *testing.T) {
+	t.Parallel()
+
+	res := conformance.NewPathResource("default", "/")
+
+	withEtcd(t, func(s state.State) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		var eg errgroup.Group
+
+		err := s.Create(ctx, res)
+		assert.NoError(t, err)
+
+		for range 10 {
+			eg.Go(func() error {
+				err := s.Destroy(ctx, res.Metadata())
+				if err != nil && !state.IsNotFoundError(err) {
+					return err
+				}
+
+				return nil
+			})
+		}
+
+		require.NoError(t, eg.Wait())
 	})
 }
 

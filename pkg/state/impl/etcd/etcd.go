@@ -330,9 +330,11 @@ func (st *State) Destroy(ctx context.Context, resourcePointer resource.Pointer, 
 	var foundVersion int64
 
 	txnGetKvs := txnResp.Responses[0].GetResponseRange().Kvs
-	if len(txnResp.Responses[0].GetResponseRange().Kvs) > 0 {
-		foundVersion = txnGetKvs[0].Version
+	if len(txnGetKvs) == 0 {
+		return nil
 	}
+
+	foundVersion = txnGetKvs[0].Version
 
 	return fmt.Errorf("failed to destroy: %w", ErrVersionConflict(resourcePointer, etcdVersion, foundVersion))
 }
