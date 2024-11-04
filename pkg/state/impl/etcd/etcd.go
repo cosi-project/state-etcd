@@ -7,6 +7,7 @@ package etcd
 
 import (
 	"context"
+	"encoding/binary"
 	"fmt"
 	"sort"
 	"strconv"
@@ -339,9 +340,21 @@ func (st *State) Destroy(ctx context.Context, resourcePointer resource.Pointer, 
 	return fmt.Errorf("failed to destroy: %w", ErrVersionConflict(resourcePointer, etcdVersion, foundVersion))
 }
 
+func encodeBookmark(revision int64) state.Bookmark {
+	return binary.BigEndian.AppendUint64(nil, uint64(revision))
+}
+
+func decodeBookmark(bookmark state.Bookmark) (int64, error) {
+	if len(bookmark) != 8 {
+		return 0, fmt.Errorf("invalid bookmark length: %d", len(bookmark))
+	}
+
+	return int64(binary.BigEndian.Uint64(bookmark)), nil
+}
+
 // Watch a resource.
 //
-//nolint:gocognit
+//nolint:gocognit,gocyclo,cyclop
 func (st *State) Watch(ctx context.Context, resourcePointer resource.Pointer, ch chan<- state.Event, opts ...state.WatchOption) error {
 	ctx = st.clearIncomingContext(ctx)
 
@@ -351,44 +364,53 @@ func (st *State) Watch(ctx context.Context, resourcePointer resource.Pointer, ch
 		opt(&options)
 	}
 
-	if options.TailEvents > 0 {
-		return fmt.Errorf("failed to watch: %w", ErrUnsupported("tailEvents"))
-	}
-
 	etcdKey := st.etcdKeyFromPointer(resourcePointer)
 
 	var (
-		curResource resource.Resource
-		err         error
+		revision     int64
+		initialEvent state.Event
 	)
 
-	getResp, err := st.cli.Get(ctx, etcdKey)
-	if err != nil {
-		return fmt.Errorf("etcd call failed on watch %q: %w", resourcePointer, err)
-	}
+	switch {
+	case options.TailEvents > 0:
+		return fmt.Errorf("failed to watch: %w", ErrUnsupported("tailEvents"))
+	case options.StartFromBookmark != nil:
+		var err error
 
-	var initialEvent state.Event
-
-	if len(getResp.Kvs) > 0 {
-		curResource, err = st.unmarshalResource(getResp.Kvs[0])
+		revision, err = decodeBookmark(options.StartFromBookmark)
 		if err != nil {
-			return fmt.Errorf("failed to unmarshal on watch %q: %w", resourcePointer, err)
+			return fmt.Errorf("failed to watch %q: %w", resourcePointer, err)
+		}
+	default:
+		var curResource resource.Resource
+
+		getResp, err := st.cli.Get(ctx, etcdKey)
+		if err != nil {
+			return fmt.Errorf("etcd call failed on watch %q: %w", resourcePointer, err)
 		}
 
-		initialEvent.Resource = curResource
-		initialEvent.Type = state.Created
-	} else {
-		initialEvent.Resource = resource.NewTombstone(
-			resource.NewMetadata(
-				resourcePointer.Namespace(),
-				resourcePointer.Type(),
-				resourcePointer.ID(),
-				resource.VersionUndefined,
-			))
-		initialEvent.Type = state.Destroyed
-	}
+		revision = getResp.Header.Revision
+		initialEvent.Bookmark = encodeBookmark(getResp.Header.Revision)
 
-	revision := getResp.Header.Revision
+		if len(getResp.Kvs) > 0 {
+			curResource, err = st.unmarshalResource(getResp.Kvs[0])
+			if err != nil {
+				return fmt.Errorf("failed to unmarshal on watch %q: %w", resourcePointer, err)
+			}
+
+			initialEvent.Resource = curResource
+			initialEvent.Type = state.Created
+		} else {
+			initialEvent.Resource = resource.NewTombstone(
+				resource.NewMetadata(
+					resourcePointer.Namespace(),
+					resourcePointer.Type(),
+					resourcePointer.ID(),
+					resource.VersionUndefined,
+				))
+			initialEvent.Type = state.Destroyed
+		}
+	}
 
 	// wrap the context to make sure Watch is aborted if the loop terminates
 	ctx, cancel := context.WithCancel(ctx)
@@ -404,8 +426,10 @@ func (st *State) Watch(ctx context.Context, resourcePointer resource.Pointer, ch
 		}()
 		defer cancel()
 
-		if !channel.SendWithContext(ctx, ch, initialEvent) {
-			return
+		if initialEvent.Resource != nil {
+			if !channel.SendWithContext(ctx, ch, initialEvent) {
+				return
+			}
 		}
 
 		for {
@@ -490,17 +514,26 @@ func (st *State) watchKind(ctx context.Context, resourceKind resource.Kind, sing
 		return options.LabelQueries.Matches(*res.Metadata().Labels()) && options.IDQuery.Matches(*res.Metadata())
 	}
 
-	if options.TailEvents > 0 {
-		return fmt.Errorf("failed to %s: %w", opName, ErrUnsupported("tailEvents"))
-	}
-
 	etcdKey := st.etcdKeyPrefixFromKind(resourceKind)
 
-	var bootstrapList []resource.Resource
+	var (
+		bootstrapList []resource.Resource
+		revision      int64
+	)
 
-	var revision int64
+	switch {
+	case options.TailEvents > 0:
+		return fmt.Errorf("failed to %s: %w", opName, ErrUnsupported("tailEvents"))
+	case options.StartFromBookmark != nil && options.BootstrapContents:
+		return fmt.Errorf("failed to %s: %w", opName, ErrUnsupported("startFromBookmark and bootstrapContents"))
+	case options.StartFromBookmark != nil:
+		var err error
 
-	if options.BootstrapContents {
+		revision, err = decodeBookmark(options.StartFromBookmark)
+		if err != nil {
+			return fmt.Errorf("failed to %s %q: %w", opName, resourceKind, err)
+		}
+	case options.BootstrapContents:
 		getResp, err := st.cli.Get(ctx, etcdKey, clientv3.WithPrefix())
 		if err != nil {
 			return fmt.Errorf("etcd call failed on %s %q: %w", opName, resourceKind, err)
@@ -559,6 +592,7 @@ func (st *State) watchKind(ctx context.Context, resourceKind resource.Kind, sing
 					state.Event{
 						Type:     state.Bootstrapped,
 						Resource: resource.NewTombstone(resource.NewMetadata(resourceKind.Namespace(), resourceKind.Type(), "", resource.VersionUndefined)),
+						Bookmark: encodeBookmark(revision),
 					},
 				) {
 					return
@@ -574,6 +608,7 @@ func (st *State) watchKind(ctx context.Context, resourceKind resource.Kind, sing
 				events = append(events, state.Event{
 					Type:     state.Bootstrapped,
 					Resource: resource.NewTombstone(resource.NewMetadata(resourceKind.Namespace(), resourceKind.Type(), "", resource.VersionUndefined)),
+					Bookmark: encodeBookmark(revision),
 				})
 
 				if !channel.SendWithContext(ctx, aggCh, events) {
@@ -741,18 +776,23 @@ func (st *State) convertEvent(etcdEvent *clientv3.Event) (state.Event, error) {
 		return state.Event{
 			Resource: previous,
 			Type:     state.Destroyed,
+			Bookmark: encodeBookmark(etcdEvent.Kv.ModRevision),
 		}, nil
 	}
 
 	eventType := state.Updated
+	bookmark := encodeBookmark(etcdEvent.Kv.ModRevision)
+
 	if etcdEvent.IsCreate() {
 		eventType = state.Created
+		bookmark = encodeBookmark(etcdEvent.Kv.CreateRevision)
 	}
 
 	return state.Event{
 		Resource: current,
 		Old:      previous,
 		Type:     eventType,
+		Bookmark: bookmark,
 	}, nil
 }
 
