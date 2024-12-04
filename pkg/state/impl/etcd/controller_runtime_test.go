@@ -13,6 +13,7 @@ import (
 	"github.com/cosi-project/runtime/pkg/resource/protobuf"
 	"github.com/cosi-project/runtime/pkg/state"
 	"github.com/cosi-project/runtime/pkg/state/impl/store"
+	tmust "github.com/siderolabs/gen/xtesting/must"
 	suiterunner "github.com/stretchr/testify/suite"
 	clientv3 "go.etcd.io/etcd/client/v3"
 
@@ -36,18 +37,12 @@ func TestRuntimeConformance(t *testing.T) {
 	t.Parallel()
 
 	testhelpers.WithEtcd(t, func(cli *clientv3.Client) {
-		suite := &conformance.RuntimeSuite{}
-		suite.SetupRuntime = func() {
-			etcdState := etcd.NewState(cli, store.ProtobufMarshaler{}, etcd.WithSalt([]byte("test123")), etcd.WithKeyPrefix(suite.T().Name()))
-
-			suite.State = state.WrapCore(etcdState)
-
-			var err error
-
-			logger := logging.DefaultLogger()
-
-			suite.Runtime, err = runtime.NewRuntime(suite.State, logger)
-			suite.Require().NoError(err)
+		suite := &conformance.RuntimeSuite{
+			SetupRuntime: func(rs *conformance.RuntimeSuite) {
+				etcdState := etcd.NewState(cli, store.ProtobufMarshaler{}, etcd.WithSalt([]byte("test123")), etcd.WithKeyPrefix(rs.T().Name()))
+				rs.State = state.WrapCore(etcdState)
+				rs.Runtime = tmust.Value(runtime.NewRuntime(rs.State, logging.DefaultLogger()))(rs.T())
+			},
 		}
 
 		suiterunner.Run(t, suite)
