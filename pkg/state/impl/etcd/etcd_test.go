@@ -127,10 +127,16 @@ func TestClearGRPCMetadata(t *testing.T) {
 }
 
 func withEtcd(t *testing.T, f func(state.State)) {
+	withEtcdAndClient(t, func(st state.State, _ *clientv3.Client) {
+		f(st)
+	})
+}
+
+func withEtcdAndClient(t *testing.T, f func(state.State, *clientv3.Client)) {
 	testhelpers.WithEtcd(t, func(cli *clientv3.Client) {
 		etcdState := etcd.NewState(cli, store.ProtobufMarshaler{}, etcd.WithSalt([]byte("test123")))
 		st := state.WrapCore(etcdState)
 
-		f(st)
+		f(st, cli)
 	})
 }

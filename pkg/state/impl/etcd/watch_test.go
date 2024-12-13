@@ -15,6 +15,7 @@ import (
 	"github.com/cosi-project/runtime/pkg/state/conformance"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/goleak"
 )
 
@@ -341,6 +342,65 @@ func TestWatchKindStress(t *testing.T) {
 					}
 				}
 			}
+		}
+	})
+}
+
+func TestWatchInvalidBookmark(t *testing.T) {
+	t.Cleanup(func() { goleak.VerifyNone(t, goleak.IgnoreCurrent()) })
+
+	withEtcdAndClient(t, func(s state.State, client *clientv3.Client) {
+		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		defer cancel()
+
+		watchCh := make(chan state.Event)
+
+		require.NoError(t, s.WatchKind(ctx, conformance.NewPathResource("default", "").Metadata(), watchCh))
+
+		require.NoError(t, s.Create(ctx, conformance.NewPathResource("default", "path-0")))
+
+		const watchEventTimeout = 10 * time.Second
+
+		var bookmark []byte
+
+		select {
+		case <-time.After(watchEventTimeout):
+			t.Fatal("timeout waiting for event")
+		case ev := <-watchCh:
+			assert.Equal(t, state.Created, ev.Type)
+			require.NotNil(t, ev.Bookmark)
+
+			bookmark = ev.Bookmark
+		}
+
+		// create one more resource
+		require.NoError(t, s.Create(ctx, conformance.NewPathResource("default", "path-1")))
+
+		// figure out last etcd revision
+		resp, err := client.Get(ctx, "default", clientv3.WithPrefix())
+		require.NoError(t, err)
+
+		lastRevision := resp.Header.Revision
+
+		// create one more resource
+		require.NoError(t, s.Create(ctx, conformance.NewPathResource("default", "path-2")))
+
+		// compact away
+		_, err = client.Compact(ctx, lastRevision)
+		require.NoError(t, err)
+
+		// try to watch with the old bookmark
+		watch2Ch := make(chan state.Event)
+
+		err = s.WatchKind(ctx, conformance.NewPathResource("default", "").Metadata(), watch2Ch, state.WithKindStartFromBookmark(bookmark))
+		require.NoError(t, err)
+
+		select {
+		case <-time.After(watchEventTimeout):
+			t.Fatal("timeout waiting for event")
+		case ev := <-watch2Ch:
+			require.Error(t, ev.Error)
+			assert.True(t, state.IsInvalidWatchBookmarkError(ev.Error), "error: %v", ev.Error)
 		}
 	})
 }

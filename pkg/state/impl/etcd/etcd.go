@@ -8,6 +8,7 @@ package etcd
 import (
 	"context"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"sort"
 	"strconv"
@@ -19,6 +20,7 @@ import (
 	"github.com/siderolabs/gen/channel"
 	"github.com/siderolabs/gen/xslices"
 	"go.etcd.io/etcd/api/v3/mvccpb"
+	"go.etcd.io/etcd/api/v3/v3rpc/rpctypes"
 	clientv3 "go.etcd.io/etcd/client/v3"
 
 	"github.com/cosi-project/state-etcd/pkg/util"
@@ -346,7 +348,7 @@ func encodeBookmark(revision int64) state.Bookmark {
 
 func decodeBookmark(bookmark state.Bookmark) (int64, error) {
 	if len(bookmark) != 8 {
-		return 0, fmt.Errorf("invalid bookmark length: %d", len(bookmark))
+		return 0, ErrInvalidWatchBookmark(fmt.Errorf("invalid bookmark length: %d", len(bookmark)))
 	}
 
 	return int64(binary.BigEndian.Uint64(bookmark)), nil
@@ -449,10 +451,19 @@ func (st *State) Watch(ctx context.Context, resourcePointer resource.Pointer, ch
 			}
 
 			if watchResponse.Err() != nil {
+				err := watchResponse.Err()
+
+				switch {
+				case errors.Is(err, rpctypes.ErrCompacted):
+					err = ErrInvalidWatchBookmark(err)
+				case errors.Is(err, rpctypes.ErrFutureRev):
+					err = ErrInvalidWatchBookmark(err)
+				}
+
 				channel.SendWithContext(ctx, ch,
 					state.Event{
 						Type:  state.Errored,
-						Error: watchResponse.Err(),
+						Error: err,
 					},
 				)
 
@@ -637,9 +648,18 @@ func (st *State) watchKind(ctx context.Context, resourceKind resource.Kind, sing
 			}
 
 			if watchResponse.Err() != nil {
+				err := watchResponse.Err()
+
+				switch {
+				case errors.Is(err, rpctypes.ErrCompacted):
+					err = ErrInvalidWatchBookmark(err)
+				case errors.Is(err, rpctypes.ErrFutureRev):
+					err = ErrInvalidWatchBookmark(err)
+				}
+
 				watchErrorEvent := state.Event{
 					Type:  state.Errored,
-					Error: watchResponse.Err(),
+					Error: err,
 				}
 
 				switch {

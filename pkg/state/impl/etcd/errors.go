@@ -57,6 +57,13 @@ type eUnsupported struct {
 
 func (eUnsupported) UnsupportedError() {}
 
+//nolint:errname
+type eInvalidWatchBookmark struct {
+	error
+}
+
+func (eInvalidWatchBookmark) InvalidWatchBookmarkError() {}
+
 // ErrAlreadyExists generates error compatible with state.ErrConflict.
 func ErrAlreadyExists(r resource.Reference) error {
 	return eConflict{
@@ -105,5 +112,12 @@ func ErrPhaseConflict(r resource.Reference, expectedPhase resource.Phase) error 
 func ErrUnsupported(operation string) error {
 	return eUnsupported{
 		fmt.Errorf("operation %s is not supported", operation),
+	}
+}
+
+// ErrInvalidWatchBookmark generates error compatible with state.ErrInvalidWatchBookmark.
+func ErrInvalidWatchBookmark(e error) error {
+	return eInvalidWatchBookmark{
+		e,
 	}
 }

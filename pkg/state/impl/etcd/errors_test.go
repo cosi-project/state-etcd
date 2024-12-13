@@ -5,6 +5,7 @@
 package etcd_test
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/cosi-project/runtime/pkg/resource"
@@ -27,4 +28,6 @@ func TestErrors(t *testing.T) {
 	require.True(t, state.IsConflictError(etcd.ErrAlreadyExists(res), state.WithResourceType("a")))
 	require.False(t, state.IsConflictError(etcd.ErrAlreadyExists(res), state.WithResourceType("b")))
 	require.True(t, state.IsConflictError(etcd.ErrAlreadyExists(res), state.WithResourceNamespace("ns")))
+
+	require.True(t, state.IsInvalidWatchBookmarkError(etcd.ErrInvalidWatchBookmark(errors.New("invalid"))))
 }
