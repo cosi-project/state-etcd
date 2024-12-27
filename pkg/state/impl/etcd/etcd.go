@@ -570,6 +570,16 @@ func (st *State) watchKind(ctx context.Context, resourceKind resource.Kind, sing
 		})
 	}
 
+	if !options.BootstrapContents && options.BootstrapBookmark {
+		// fetch initial revision
+		getResp, err := st.cli.Get(ctx, etcdKey)
+		if err != nil {
+			return fmt.Errorf("etcd call failed on %s %q: %w", opName, resourceKind, err)
+		}
+
+		revision = getResp.Header.Revision
+	}
+
 	// wrap the context to make sure Watch is aborted if the loop terminates
 	ctx, cancel := context.WithCancel(ctx)
 	ctx = clientv3.WithRequireLeader(ctx)
@@ -629,6 +639,25 @@ func (st *State) watchKind(ctx context.Context, resourceKind resource.Kind, sing
 
 			// make the list nil so that it gets GC'ed, we don't need it anymore after this point
 			bootstrapList = nil
+		}
+
+		if options.BootstrapBookmark {
+			event := state.Event{
+				Type:     state.Noop,
+				Resource: resource.NewTombstone(resource.NewMetadata(resourceKind.Namespace(), resourceKind.Type(), "", resource.VersionUndefined)),
+				Bookmark: encodeBookmark(revision),
+			}
+
+			switch {
+			case singleCh != nil:
+				if !channel.SendWithContext(ctx, singleCh, event) {
+					return
+				}
+			case aggCh != nil:
+				if !channel.SendWithContext(ctx, aggCh, []state.Event{event}) {
+					return
+				}
+			}
 		}
 
 		for {
@@ -725,7 +754,7 @@ func (st *State) watchKind(ctx context.Context, resourceKind resource.Kind, sing
 						// skip the event
 						continue
 					}
-				case state.Errored, state.Bootstrapped:
+				case state.Errored, state.Bootstrapped, state.Noop:
 					panic("should never be reached")
 				}
 
