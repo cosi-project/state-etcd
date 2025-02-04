@@ -10,6 +10,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"iter"
 	"sort"
 	"strconv"
 	"time"
@@ -434,22 +435,7 @@ func (st *State) Watch(ctx context.Context, resourcePointer resource.Pointer, ch
 			}
 		}
 
-		for {
-			var (
-				watchResponse clientv3.WatchResponse
-				ok            bool
-			)
-
-			select {
-			case <-ctx.Done():
-				return
-			case watchResponse, ok = <-watchCh:
-				if !ok {
-					// channel closed, quit
-					return
-				}
-			}
-
+		for watchResponse := range chanItems(ctx, watchCh) {
 			if watchResponse.Err() != nil {
 				err := watchResponse.Err()
 
@@ -588,11 +574,12 @@ func (st *State) watchKind(ctx context.Context, resourceKind resource.Kind, sing
 
 	go func() {
 		defer func() {
+			cancel()
+
 			// drain the watchCh, etcd Watch API guarantees that the channel is closed when the watcher is canceled
 			for range watchCh { //nolint:revive
 			}
 		}()
-		defer cancel()
 
 		if options.BootstrapContents {
 			switch {
@@ -660,22 +647,7 @@ func (st *State) watchKind(ctx context.Context, resourceKind resource.Kind, sing
 			}
 		}
 
-		for {
-			var (
-				watchResponse clientv3.WatchResponse
-				ok            bool
-			)
-
-			select {
-			case <-ctx.Done():
-				return
-			case watchResponse, ok = <-watchCh:
-				if !ok {
-					// channel closed, quit
-					return
-				}
-			}
-
+		for watchResponse := range chanItems(ctx, watchCh) {
 			if watchResponse.Err() != nil {
 				err := watchResponse.Err()
 
@@ -850,4 +822,20 @@ func (st *State) convertEvent(etcdEvent *clientv3.Event) (state.Event, error) {
 // This is useful for preventing the GRPC metadata from being forwarded to etcd, e.g. in cases where an embedded etcd is used.
 func (st *State) clearIncomingContext(ctx context.Context) context.Context {
 	return util.ClearContextMeta(ctx)
+}
+
+func chanItems[T any](ctx context.Context, ch <-chan T) iter.Seq[T] {
+	return func(yield func(T) bool) {
+		for {
+			select {
+			case <-ctx.Done():
+			case item, ok := <-ch:
+				if ok && yield(item) {
+					continue
+				}
+			}
+
+			return
+		}
+	}
 }
