@@ -31,7 +31,7 @@ func TestPreserveCreated(t *testing.T) {
 	res := conformance.NewPathResource("default", "/another-path")
 
 	withEtcd(t, func(s state.State) {
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithCancel(t.Context())
 		defer cancel()
 
 		ctx = metadata.NewIncomingContext(
@@ -65,7 +65,7 @@ func TestDestroy(t *testing.T) {
 	res := conformance.NewPathResource("default", "/")
 
 	withEtcd(t, func(s state.State) {
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithCancel(t.Context())
 		defer cancel()
 
 		var eg errgroup.Group
@@ -94,7 +94,7 @@ func TestClearGRPCMetadata(t *testing.T) {
 	res := conformance.NewPathResource("default", "/")
 
 	withEtcd(t, func(s state.State) {
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithCancel(t.Context())
 		defer cancel()
 
 		// the authorization header causes embedded etcd to return an error if it is passed through

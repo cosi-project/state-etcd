@@ -61,7 +61,7 @@ func WithEtcd(t *testing.T, f func(*clientv3.Client)) {
 		t.Fatalf("failed to start etcd: %v", err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
 	defer cancel()
 
 	select {
@@ -73,7 +73,7 @@ func WithEtcd(t *testing.T, f func(*clientv3.Client)) {
 	defer func() {
 		e.Close()
 
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		shutdownCtx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
 		defer cancel()
 
 		select {

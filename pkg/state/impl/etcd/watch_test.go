@@ -37,7 +37,7 @@ func TestWatchKindWithBootstrap(t *testing.T) {
 			defer goleak.VerifyNone(t, goleak.IgnoreCurrent())
 
 			withEtcd(t, func(s state.State) {
-				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+				ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 				defer cancel()
 
 				for i := range 3 {
@@ -108,7 +108,7 @@ func TestWatchSpuriousEvents(t *testing.T) {
 	t.Cleanup(func() { goleak.VerifyNone(t, goleak.IgnoreCurrent()) })
 
 	withEtcd(t, func(s state.State) {
-		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
+		ctx, cancel := context.WithTimeout(t.Context(), 1*time.Minute)
 		defer cancel()
 
 		const N = 100
@@ -151,7 +151,7 @@ func TestWatchDeadCancel(t *testing.T) {
 	t.Cleanup(func() { goleak.VerifyNone(t, goleak.IgnoreCurrent()) })
 
 	withEtcd(t, func(s state.State) {
-		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
 		defer cancel()
 
 		const N = 50
@@ -234,7 +234,7 @@ func TestWatchKindStress(t *testing.T) {
 	t.Cleanup(func() { goleak.VerifyNone(t, goleak.IgnoreCurrent()) })
 
 	withEtcd(t, func(s state.State) {
-		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
 		defer cancel()
 
 		const (
@@ -350,7 +350,7 @@ func TestWatchInvalidBookmark(t *testing.T) {
 	t.Cleanup(func() { goleak.VerifyNone(t, goleak.IgnoreCurrent()) })
 
 	withEtcdAndClient(t, func(s state.State, client *clientv3.Client) {
-		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
 		defer cancel()
 
 		watchCh := make(chan state.Event)
