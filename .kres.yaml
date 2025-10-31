@@ -1,7 +1,0 @@
----
-kind: golang.Generate
-spec: {}
----
-kind: auto.CI
-spec:
-  provider: drone
