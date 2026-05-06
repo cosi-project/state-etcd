@@ -4,8 +4,21 @@
 
 package etcd
 
-// StateOptions configure inmem.State.
+import (
+	"context"
+
+	"github.com/cosi-project/runtime/pkg/resource"
+	"github.com/cosi-project/runtime/pkg/state"
+)
+
+// ObserverFunc is invoked after a successful Create, Update, or Destroy operation.
+// Teardown is implemented as an Update that transitions the phase from resource.PhaseRunning
+// to resource.PhaseTearingDown.
+type ObserverFunc func(ctx context.Context, eventType state.EventType, resourceType resource.Type, phase, previousPhase resource.Phase, marshaledBytes int) error
+
+// StateOptions configure etcd.State.
 type StateOptions struct {
+	observer  ObserverFunc
 	keyPrefix string
 	salt      []byte
 }
@@ -33,5 +46,14 @@ func WithSalt(salt []byte) StateOption {
 func WithKeyPrefix(keyPrefix string) StateOption {
 	return func(options *StateOptions) {
 		options.keyPrefix = keyPrefix
+	}
+}
+
+// WithObserver registers a callback that is invoked after each successful Create, Update,
+// or Destroy operation. It can be used by callers to record metrics such as operation
+// counts and marshaled byte sizes.
+func WithObserver(fn ObserverFunc) StateOption {
+	return func(options *StateOptions) {
+		options.observer = fn
 	}
 }

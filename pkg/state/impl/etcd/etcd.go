@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"iter"
+	"runtime/debug"
 	"sort"
 	"strconv"
 	"time"
@@ -37,6 +38,7 @@ type Client interface {
 type State struct {
 	cli       Client
 	marshaler store.Marshaler
+	observer  ObserverFunc
 	keyPrefix string
 	salt      []byte
 }
@@ -55,9 +57,24 @@ func NewState(cli Client, marshaler store.Marshaler, opts ...StateOption) *State
 	return &State{
 		cli:       cli,
 		marshaler: marshaler,
+		observer:  options.observer,
 		keyPrefix: options.keyPrefix,
 		salt:      options.salt,
 	}
+}
+
+func (st *State) observe(ctx context.Context, eventType state.EventType, resourceType resource.Type, phase, previousPhase resource.Phase, marshaledBytes int) (err error) {
+	if st.observer == nil {
+		return nil
+	}
+
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("observer panicked: %v\n%s", r, debug.Stack())
+		}
+	}()
+
+	return st.observer(ctx, eventType, resourceType, phase, previousPhase, marshaledBytes)
 }
 
 // Get a resource.
@@ -185,6 +202,10 @@ func (st *State) Create(ctx context.Context, res resource.Resource, opts ...stat
 	// purposes.
 	*res.Metadata() = *resCopy.Metadata()
 
+	if err := st.observe(ctx, state.Created, resCopy.Metadata().Type(), resCopy.Metadata().Phase(), resCopy.Metadata().Phase(), len(data)); err != nil {
+		return fmt.Errorf("observer error after create %q: %w", resCopy.Metadata(), err)
+	}
+
 	return nil
 }
 
@@ -277,6 +298,10 @@ func (st *State) Update(ctx context.Context, res resource.Resource, opts ...stat
 	// purposes.
 	*res.Metadata() = *resCopy.Metadata()
 
+	if err := st.observe(ctx, state.Updated, resCopy.Metadata().Type(), resCopy.Metadata().Phase(), curResource.Metadata().Phase(), len(data)); err != nil {
+		return fmt.Errorf("observer error after update %q: %w", resCopy.Metadata(), err)
+	}
+
 	return nil
 }
 
@@ -316,6 +341,8 @@ func (st *State) Destroy(ctx context.Context, resourcePointer resource.Pointer, 
 		return fmt.Errorf("failed to destroy: %w", ErrPendingFinalizers(*curResource.Metadata()))
 	}
 
+	deletedBytes := len(resp.Kvs[0].Value)
+
 	txnResp, err := st.cli.Txn(ctx).If(
 		clientv3.Compare(clientv3.Version(etcdKey), "=", etcdVersion),
 	).Then(
@@ -328,6 +355,10 @@ func (st *State) Destroy(ctx context.Context, resourcePointer resource.Pointer, 
 	}
 
 	if txnResp.Succeeded {
+		if err := st.observe(ctx, state.Destroyed, resourcePointer.Type(), curResource.Metadata().Phase(), curResource.Metadata().Phase(), deletedBytes); err != nil {
+			return fmt.Errorf("observer error after destroy %q: %w", resourcePointer, err)
+		}
+
 		return nil
 	}
 
