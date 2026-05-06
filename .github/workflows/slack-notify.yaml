@@ -1,6 +1,6 @@
 # THIS FILE WAS AUTOMATICALLY GENERATED, PLEASE DO NOT EDIT.
 #
-# Generated on 2025-10-31T11:00:06Z by kres cd5a938.
+# Generated on 2026-05-06T09:14:46Z by kres 1762ab2.
 
 "on":
   workflow_run:
@@ -23,7 +23,7 @@ jobs:
         run: |
           echo pull_request_number=$(gh pr view -R ${{ github.repository }} ${{ github.event.workflow_run.head_repository.owner.login }}:${{ github.event.workflow_run.head_branch }} --json number --jq .number) >> $GITHUB_OUTPUT
       - name: Slack Notify
-        uses: slackapi/slack-github-action@v2
+        uses: slackapi/slack-github-action@03ea5433c137af7c0495bc0cad1af10403fc800c # version: v3.0.2
         with:
           method: chat.postMessage
           payload: |

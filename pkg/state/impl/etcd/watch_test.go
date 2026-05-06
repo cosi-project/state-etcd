@@ -249,7 +249,7 @@ func TestWatchKindStress(t *testing.T) {
 			require.NoError(t, s.Create(ctx, conformance.NewPathResource("default", fmt.Sprintf("path-%d", i))))
 		}
 
-		var watchChannels []chan state.Event
+		var watchChannels []chan state.Event //nolint:prealloc
 
 		for iteration := range iterations {
 			// test setup:
