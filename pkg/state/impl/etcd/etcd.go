@@ -39,6 +39,7 @@ type State struct {
 	cli       Client
 	marshaler store.Marshaler
 	observer  ObserverFunc
+	limiter   LimiterFunc
 	keyPrefix string
 	salt      []byte
 }
@@ -58,23 +59,40 @@ func NewState(cli Client, marshaler store.Marshaler, opts ...StateOption) *State
 		cli:       cli,
 		marshaler: marshaler,
 		observer:  options.observer,
+		limiter:   options.limiter,
 		keyPrefix: options.keyPrefix,
 		salt:      options.salt,
 	}
 }
 
-func (st *State) observe(ctx context.Context, eventType state.EventType, resourceType resource.Type, phase, previousPhase resource.Phase, marshaledBytes int) (err error) {
-	if st.observer == nil {
+func (st *State) invokeHook(
+	ctx context.Context,
+	name string,
+	fn func(context.Context, state.EventType, resource.Type, resource.Phase, resource.Phase, int) error,
+	eventType state.EventType,
+	resourceType resource.Type,
+	phase, previousPhase resource.Phase,
+	marshaledBytes int,
+) (err error) {
+	if fn == nil {
 		return nil
 	}
 
 	defer func() {
 		if r := recover(); r != nil {
-			err = fmt.Errorf("observer panicked: %v\n%s", r, debug.Stack())
+			err = fmt.Errorf("%s panicked: %v\n%s", name, r, debug.Stack())
 		}
 	}()
 
-	return st.observer(ctx, eventType, resourceType, phase, previousPhase, marshaledBytes)
+	return fn(ctx, eventType, resourceType, phase, previousPhase, marshaledBytes)
+}
+
+func (st *State) observe(ctx context.Context, eventType state.EventType, resourceType resource.Type, phase, previousPhase resource.Phase, marshaledBytes int) error {
+	return st.invokeHook(ctx, "observer", st.observer, eventType, resourceType, phase, previousPhase, marshaledBytes)
+}
+
+func (st *State) limit(ctx context.Context, eventType state.EventType, resourceType resource.Type, phase, previousPhase resource.Phase, marshaledBytes int) error {
+	return st.invokeHook(ctx, "limiter", st.limiter, eventType, resourceType, phase, previousPhase, marshaledBytes)
 }
 
 // Get a resource.
@@ -176,6 +194,10 @@ func (st *State) Create(ctx context.Context, res resource.Resource, opts ...stat
 		return fmt.Errorf("failed to marshal on create %q: %w", resCopy.Metadata(), err)
 	}
 
+	if err = st.limit(ctx, state.Created, resCopy.Metadata().Type(), resCopy.Metadata().Phase(), resCopy.Metadata().Phase(), len(data)); err != nil {
+		return err
+	}
+
 	txnResp, err := st.cli.Txn(ctx).If(
 		clientv3.Compare(clientv3.Version(etcdKey), "=", 0), // not exists check
 	).Then(
@@ -263,6 +285,10 @@ func (st *State) Update(ctx context.Context, res resource.Resource, opts ...stat
 		return fmt.Errorf("failed to update: %w", ErrPhaseConflict(curResource.Metadata(), *options.ExpectedPhase))
 	}
 
+	if err = st.limit(ctx, state.Updated, resCopy.Metadata().Type(), resCopy.Metadata().Phase(), curResource.Metadata().Phase(), len(data)); err != nil {
+		return err
+	}
+
 	txnResp, err := st.cli.Txn(ctx).If(
 		clientv3.Compare(clientv3.Version(etcdKey), "=", etcdVersion),
 	).Then(
@@ -342,6 +368,10 @@ func (st *State) Destroy(ctx context.Context, resourcePointer resource.Pointer, 
 	}
 
 	deletedBytes := len(resp.Kvs[0].Value)
+
+	if err = st.limit(ctx, state.Destroyed, resourcePointer.Type(), curResource.Metadata().Phase(), curResource.Metadata().Phase(), deletedBytes); err != nil {
+		return err
+	}
 
 	txnResp, err := st.cli.Txn(ctx).If(
 		clientv3.Compare(clientv3.Version(etcdKey), "=", etcdVersion),

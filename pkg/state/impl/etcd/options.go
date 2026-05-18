@@ -16,9 +16,16 @@ import (
 // to resource.PhaseTearingDown.
 type ObserverFunc func(ctx context.Context, eventType state.EventType, resourceType resource.Type, phase, previousPhase resource.Phase, marshaledBytes int) error
 
+// LimiterFunc is invoked before each Create, Update, or Destroy etcd transaction.
+// Returning a non-nil error aborts the mutation and propagates the error to the caller.
+// For Create/Update, marshaledBytes is the size of the payload about to be written.
+// For Destroy, marshaledBytes is the size of the existing value about to be deleted.
+type LimiterFunc func(ctx context.Context, eventType state.EventType, resourceType resource.Type, phase, previousPhase resource.Phase, marshaledBytes int) error
+
 // StateOptions configure etcd.State.
 type StateOptions struct {
 	observer  ObserverFunc
+	limiter   LimiterFunc
 	keyPrefix string
 	salt      []byte
 }
@@ -55,5 +62,20 @@ func WithKeyPrefix(keyPrefix string) StateOption {
 func WithObserver(fn ObserverFunc) StateOption {
 	return func(options *StateOptions) {
 		options.observer = fn
+	}
+}
+
+// WithLimiter registers a callback that is invoked before each Create, Update, or Destroy
+// etcd transaction. The callback may return an error to abort the mutation; the error is
+// propagated to the caller without any state change.
+//
+// The limiter runs after local validations (owner, version, phase, finalizers) and before
+// the etcd transaction. For Create, the existence check is part of the transaction itself,
+// so the limiter may fire for a key that turns out to already exist. For Update and Destroy,
+// the transaction may still fail due to a concurrent writer after the limiter accepts.
+// Limiters that count against a budget should tolerate these post-accept failures.
+func WithLimiter(fn LimiterFunc) StateOption {
+	return func(options *StateOptions) {
+		options.limiter = fn
 	}
 }
