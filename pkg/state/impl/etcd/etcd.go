@@ -471,7 +471,8 @@ func (st *State) Watch(ctx context.Context, resourcePointer resource.Pointer, ch
 					resourcePointer.Type(),
 					resourcePointer.ID(),
 					resource.VersionUndefined,
-				))
+				),
+			)
 			initialEvent.Type = state.Destroyed
 		}
 	}
@@ -507,7 +508,8 @@ func (st *State) Watch(ctx context.Context, resourcePointer resource.Pointer, ch
 					err = ErrInvalidWatchBookmark(err)
 				}
 
-				channel.SendWithContext(ctx, ch,
+				channel.SendWithContext(
+					ctx, ch,
 					state.Event{
 						Type:  state.Errored,
 						Error: err,
@@ -528,7 +530,8 @@ func (st *State) Watch(ctx context.Context, resourcePointer resource.Pointer, ch
 
 				event, err := st.convertEvent(etcdEvent)
 				if err != nil {
-					channel.SendWithContext(ctx, ch,
+					channel.SendWithContext(
+						ctx, ch,
 						state.Event{
 							Type:  state.Errored,
 							Error: err,
@@ -646,7 +649,8 @@ func (st *State) watchKind(ctx context.Context, resourceKind resource.Kind, sing
 			switch {
 			case singleCh != nil:
 				for _, res := range bootstrapList {
-					if !channel.SendWithContext(ctx, singleCh,
+					if !channel.SendWithContext(
+						ctx, singleCh,
 						state.Event{
 							Type:     state.Created,
 							Resource: res,
