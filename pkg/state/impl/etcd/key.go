@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"net/url"
+	"strings"
 
 	"github.com/cosi-project/runtime/pkg/resource"
 )
@@ -27,6 +28,20 @@ func (st *State) etcdKeyPrefixFromKind(kind resource.Kind) string {
 	typeEscaped := url.PathEscape(kind.Type())
 
 	return st.keyPrefix + "/" + nsEscaped + "/" + typeEscaped + "/"
+}
+
+// etcdKeyPrefixFromKey returns the kind prefix of the given etcd key.
+//
+// Keys are built as "<keyPrefix>/<namespace>/<type>/<hashedID>" by etcdKeyFromPointer, and the
+// hashed ID is hex-encoded, so it never contains a slash: cutting at the last slash yields exactly
+// the prefix etcdKeyPrefixFromKind would produce for the same kind.
+func etcdKeyPrefixFromKey(key string) string {
+	idx := strings.LastIndexByte(key, '/')
+	if idx < 0 {
+		return key
+	}
+
+	return key[:idx+1]
 }
 
 func sha256hex(input []byte) string {

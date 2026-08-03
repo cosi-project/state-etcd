@@ -12,6 +12,8 @@ import (
 	"github.com/cosi-project/runtime/pkg/state/conformance"
 	"github.com/stretchr/testify/suite"
 	"go.uber.org/goleak"
+
+	"github.com/cosi-project/state-etcd/pkg/state/impl/etcd"
 )
 
 func TestEtcdConformance(t *testing.T) {
@@ -23,4 +25,17 @@ func TestEtcdConformance(t *testing.T) {
 			Namespaces: []resource.Namespace{"default", "controller", "system", "runtime"},
 		})
 	})
+}
+
+// TestEtcdConformanceSharedWatch runs the same conformance suite with all watches served by the
+// shared watcher, as the two modes take completely different code paths.
+func TestEtcdConformanceSharedWatch(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreCurrent())
+
+	withEtcd(t, func(s state.State) {
+		suite.Run(t, &conformance.StateSuite{
+			State:      s,
+			Namespaces: []resource.Namespace{"default", "controller", "system", "runtime"},
+		})
+	}, etcd.WithSharedWatch())
 }

@@ -36,10 +36,32 @@ func init() {
 func TestRuntimeConformance(t *testing.T) {
 	t.Parallel()
 
+	runtimeConformance(t)
+}
+
+// TestRuntimeConformanceSharedWatch runs the controller runtime conformance suite against a State
+// serving all of its watches from a single shared etcd watcher.
+//
+// The controller runtime funnels every one of its per-type watches into a single channel, so it is
+// the consumer which depends on the cross-kind ordering the shared watcher provides.
+func TestRuntimeConformanceSharedWatch(t *testing.T) {
+	t.Parallel()
+
+	runtimeConformance(t, etcd.WithSharedWatch())
+}
+
+func runtimeConformance(t *testing.T, opts ...etcd.StateOption) {
+	t.Helper()
+
 	testhelpers.WithEtcd(t, func(cli *clientv3.Client) {
 		suite := &conformance.RuntimeSuite{
 			SetupRuntime: func(rs *conformance.RuntimeSuite) {
-				etcdState := etcd.NewState(cli, store.ProtobufMarshaler{}, etcd.WithSalt([]byte("test123")), etcd.WithKeyPrefix(rs.T().Name()))
+				stateOpts := append([]etcd.StateOption{
+					etcd.WithSalt([]byte("test123")),
+					etcd.WithKeyPrefix(rs.T().Name()),
+				}, opts...)
+
+				etcdState := etcd.NewState(cli, store.ProtobufMarshaler{}, stateOpts...)
 				rs.State = state.WrapCore(etcdState)
 				rs.Runtime = tmust.Value(runtime.NewRuntime(rs.State, logging.DefaultLogger()))(rs.T())
 			},

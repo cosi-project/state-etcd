@@ -24,10 +24,11 @@ type LimiterFunc func(ctx context.Context, eventType state.EventType, resourceTy
 
 // StateOptions configure etcd.State.
 type StateOptions struct {
-	observer  ObserverFunc
-	limiter   LimiterFunc
-	keyPrefix string
-	salt      []byte
+	observer    ObserverFunc
+	limiter     LimiterFunc
+	keyPrefix   string
+	salt        []byte
+	sharedWatch bool
 }
 
 // StateOption applies settings to StateOptions.
@@ -77,5 +78,35 @@ func WithObserver(fn ObserverFunc) StateOption {
 func WithLimiter(fn LimiterFunc) StateOption {
 	return func(options *StateOptions) {
 		options.limiter = fn
+	}
+}
+
+// WithSharedWatch makes all watches created by the State share a single etcd watcher established
+// over the whole key prefix, with a single goroutine dispatching the events to the subscribers.
+//
+// Without this option every Watch/WatchKind/WatchKindAggregated call establishes its own etcd
+// watcher, and the etcd client library delivers each watcher's responses on its own goroutine, so
+// there is no ordering relationship between the streams: an event for revision N might be
+// delivered after an event for revision N+1 which belongs to a different resource type. Consumers
+// merging several watches into one stream - the COSI controller runtime being one - observe that
+// as resources appearing out of causal order.
+//
+// With this option, events delivered to the same destination channel are in etcd revision order,
+// no matter which watch produced them. The guarantee is per channel rather than global: consumers
+// routinely read several watch channels in a fixed order, and a dispatcher ordering across all of
+// them would have to block on one channel while the consumer waits on another. For the same
+// reason a slow consumer only holds up the watches writing to the channel it is reading, not every
+// watch of the State.
+//
+// The cost is that the shared watcher receives the events of every resource type under the key
+// prefix, including those nobody is watching, in exchange for establishing one etcd watcher
+// instead of one per watch call.
+//
+// Watches started with state.WithStartFromBookmark are not served by the shared watcher: it is
+// already positioned past that revision and cannot replay history. Such watches fall back to a
+// dedicated etcd watcher and are not ordered against the rest.
+func WithSharedWatch() StateOption {
+	return func(options *StateOptions) {
+		options.sharedWatch = true
 	}
 }
