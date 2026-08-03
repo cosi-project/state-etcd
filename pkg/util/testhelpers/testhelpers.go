@@ -13,6 +13,7 @@ import (
 	"time"
 
 	clientv3 "go.etcd.io/etcd/client/v3"
+	"go.etcd.io/etcd/pkg/v3/featuregate"
 	"go.etcd.io/etcd/server/v3/embed"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest"
@@ -39,8 +40,7 @@ func WithEtcd(t *testing.T, f func(*clientv3.Client)) {
 	cfg.AuthToken = ""
 	cfg.AutoCompactionMode = "periodic"
 	cfg.AutoCompactionRetention = "5h"
-	cfg.ExperimentalCompactHashCheckEnabled = true
-	cfg.ExperimentalInitialCorruptCheck = true
+	cfg.ServerFeatureGate.(featuregate.MutableFeatureGate).Set("InitialCorruptCheck=true,CompactHashCheck=true") //nolint:errcheck,forcetypeassert
 	cfg.UnsafeNoFsync = true
 
 	peerURL, err := url.Parse("http://localhost:0")
