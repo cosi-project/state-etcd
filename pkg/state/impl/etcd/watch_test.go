@@ -17,6 +17,8 @@ import (
 	"github.com/stretchr/testify/require"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/goleak"
+
+	"github.com/cosi-project/state-etcd/pkg/state/impl/etcd"
 )
 
 func TestWatchKindWithBootstrap(t *testing.T) {
@@ -107,6 +109,18 @@ func TestWatchKindWithBootstrap(t *testing.T) {
 func TestWatchSpuriousEvents(t *testing.T) {
 	t.Cleanup(func() { goleak.VerifyNone(t, goleak.IgnoreCurrent()) })
 
+	watchSpuriousEvents(t)
+}
+
+func TestWatchSpuriousEventsSharedWatch(t *testing.T) {
+	t.Cleanup(func() { goleak.VerifyNone(t, goleak.IgnoreCurrent()) })
+
+	watchSpuriousEvents(t, etcd.WithSharedWatch())
+}
+
+func watchSpuriousEvents(t *testing.T, opts ...etcd.StateOption) {
+	t.Helper()
+
 	withEtcd(t, func(s state.State) {
 		ctx, cancel := context.WithTimeout(t.Context(), 1*time.Minute)
 		defer cancel()
@@ -144,11 +158,23 @@ func TestWatchSpuriousEvents(t *testing.T) {
 				assert.Equal(t, state.Destroyed, ev.Type, "ev: %v", ev.Resource)
 			}
 		}
-	})
+	}, opts...)
 }
 
 func TestWatchDeadCancel(t *testing.T) {
 	t.Cleanup(func() { goleak.VerifyNone(t, goleak.IgnoreCurrent()) })
+
+	watchDeadCancel(t)
+}
+
+func TestWatchDeadCancelSharedWatch(t *testing.T) {
+	t.Cleanup(func() { goleak.VerifyNone(t, goleak.IgnoreCurrent()) })
+
+	watchDeadCancel(t, etcd.WithSharedWatch())
+}
+
+func watchDeadCancel(t *testing.T, opts ...etcd.StateOption) {
+	t.Helper()
 
 	withEtcd(t, func(s state.State) {
 		ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
@@ -226,12 +252,24 @@ func TestWatchDeadCancel(t *testing.T) {
 				assert.Equal(t, state.Destroyed, ev.Type, "ev: %v", ev.Resource)
 			}
 		}
-	})
+	}, opts...)
+}
+
+func TestWatchKindStress(t *testing.T) {
+	t.Cleanup(func() { goleak.VerifyNone(t, goleak.IgnoreCurrent()) })
+
+	watchKindStress(t)
+}
+
+func TestWatchKindStressSharedWatch(t *testing.T) {
+	t.Cleanup(func() { goleak.VerifyNone(t, goleak.IgnoreCurrent()) })
+
+	watchKindStress(t, etcd.WithSharedWatch())
 }
 
 //nolint:gocognit,gocyclo,cyclop
-func TestWatchKindStress(t *testing.T) {
-	t.Cleanup(func() { goleak.VerifyNone(t, goleak.IgnoreCurrent()) })
+func watchKindStress(t *testing.T, opts ...etcd.StateOption) {
+	t.Helper()
 
 	withEtcd(t, func(s state.State) {
 		ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
@@ -343,7 +381,7 @@ func TestWatchKindStress(t *testing.T) {
 				}
 			}
 		}
-	})
+	}, opts...)
 }
 
 func TestWatchInvalidBookmark(t *testing.T) {

@@ -40,6 +40,7 @@ type State struct {
 	marshaler store.Marshaler
 	observer  ObserverFunc
 	limiter   LimiterFunc
+	mux       *watchMux
 	keyPrefix string
 	salt      []byte
 }
@@ -55,7 +56,7 @@ func NewState(cli Client, marshaler store.Marshaler, opts ...StateOption) *State
 		opt(&options)
 	}
 
-	return &State{
+	st := &State{
 		cli:       cli,
 		marshaler: marshaler,
 		observer:  options.observer,
@@ -63,6 +64,12 @@ func NewState(cli Client, marshaler store.Marshaler, opts ...StateOption) *State
 		keyPrefix: options.keyPrefix,
 		salt:      options.salt,
 	}
+
+	if options.sharedWatch {
+		st.mux = &watchMux{st: st}
+	}
+
+	return st
 }
 
 func (st *State) invokeHook(
@@ -430,6 +437,20 @@ func (st *State) Watch(ctx context.Context, resourcePointer resource.Pointer, ch
 
 	etcdKey := st.etcdKeyFromPointer(resourcePointer)
 
+	// watches resuming from a bookmark are positioned before the shared watcher, which cannot
+	// replay history, so they keep using a dedicated etcd watcher
+	if st.mux != nil && options.TailEvents == 0 && options.StartFromBookmark == nil {
+		return st.watchMuxed(ctx, &subscriber{
+			ctx:      ctx,
+			st:       st,
+			mux:      st.mux,
+			pointer:  resourcePointer,
+			key:      etcdKey,
+			exact:    true,
+			singleCh: ch,
+		}, "watch")
+	}
+
 	var (
 		revision     int64
 		initialEvent state.Event
@@ -576,6 +597,21 @@ func (st *State) watchKind(ctx context.Context, resourceKind resource.Kind, sing
 	}
 
 	etcdKey := st.etcdKeyPrefixFromKind(resourceKind)
+
+	// watches resuming from a bookmark are positioned before the shared watcher, which cannot
+	// replay history, so they keep using a dedicated etcd watcher
+	if st.mux != nil && options.TailEvents == 0 && options.StartFromBookmark == nil {
+		return st.watchMuxed(ctx, &subscriber{
+			ctx:      ctx,
+			st:       st,
+			mux:      st.mux,
+			kind:     resourceKind,
+			options:  options,
+			key:      etcdKey,
+			singleCh: singleCh,
+			aggCh:    aggCh,
+		}, opName)
+	}
 
 	var (
 		bootstrapList []resource.Resource
